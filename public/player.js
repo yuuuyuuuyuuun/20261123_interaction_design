@@ -197,7 +197,7 @@ function renderPlay(s, me) {
   const decl = me.decl;
   if (decl) selected = decl.color;
   const myColor = s.world.color[me.cell];
-  $('meLine').innerHTML = `白い輪の中があなたの土地（いま${landLabel(myColor)}）` +
+  $('meLine').innerHTML = `白い輪があなたの土地（いま${landLabel(myColor)}）` +
     (decl && !decl.invented ? ` ・ 予言：${landLabel(decl.color)}（当たれば +${s.ticks - decl.tick}）` : '');
 
   const invented = decl?.invented;
