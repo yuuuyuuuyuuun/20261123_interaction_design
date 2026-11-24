@@ -8,7 +8,7 @@ const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 const { World } = require('./src/engine');
 const { BOT_TYPES, createBot } = require('./src/bots');
-const { observe } = require('./src/odds');
+const { observe, localCounts } = require('./src/odds');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST_KEY = process.env.HOST_KEY || crypto.randomBytes(3).toString('hex');
@@ -91,14 +91,13 @@ function worldView() {
     rows: s.rows,
     color: s.color,
     fixedCells: s.fixed.reduce((a, f, i) => (f && a.push(i), a), []),
-    heldCells: s.held.reduce((a, f, i) => (f && a.push(i), a), []),
     playerCell: s.playerCell,
     names: game.order.map((id) => players.get(id)?.name ?? ''),
     counts: s.counts,
     tick: s.tick,
     ticks: s.ticks,
     events: s.events,
-    waves: s.waves,
+    charismas: s.charismas,
   };
 }
 
@@ -189,7 +188,11 @@ function tick() {
   const view = observe(w);
   game.botBrains.forEach((b, i) => {
     if (!b) return;
-    b.act(view, { decl: w.decl[i] }, { predict: (c) => w.predict(i, c), invent: (c) => w.invent(i, c) });
+    const cell = w.playerCell[i];
+    b.act(view, { decl: w.decl[i], local: localCounts(w, cell), color: w.color[cell] }, {
+      predict: (c) => w.predict(i, c),
+      invent: (c) => w.invent(i, c),
+    });
   });
   w.step();
   if (w.finished) return endRound();

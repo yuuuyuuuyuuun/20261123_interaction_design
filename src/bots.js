@@ -9,17 +9,18 @@ const { winProbs } = require('./odds');
 const BOT_TYPES = {
   predict: {
     label: '期待値予言',
-    short: '予言',
-    desc: '勝率×得点で判断。乗り換えると得点が減るので、少し不利になっても粘ることがある',
+    short: '期待',
+    desc: '勝率×得点で判断。乗り換えると得点が減るので、少し不利でも粘ることがある',
   },
+  follow: { label: '追従予言', short: '追従', desc: '多数派を予言し、多数派が入れ替わるたびに乗り換える' },
+  whim: { label: '気まぐれ予言', short: '気分', desc: '好きな色を予言し、ときどき気が変わる' },
   inventEarly: { label: '早期発明', short: '早発', desc: '開始直後に、勝ちそうな色を発明する' },
+  local: { label: '地元発明', short: '地元', desc: '自分の周りに仲間が3人以上いる色を、その場で発明する' },
   inventLate: { label: '機を見て発明', short: '機発', desc: '予言で様子を見て、途中で勝ちそうな色を発明する' },
+  bandwagon: { label: '勝ち馬発明', short: '勝馬', desc: '予言で様子を見て、勝ちがほぼ確実になった色を発明する' },
   contrarian: { label: '逆張り発明', short: '逆張', desc: '開始直後に、最も少ない色を発明する' },
 };
-// not offered on the host screen; kept for comparison in the simulations
-const HIDDEN_TYPES = {
-  follow: { label: '追従予言', short: '追従', desc: '多数派を予言し、多数派が入れ替わるたびに乗り換える' },
-};
+const HIDDEN_TYPES = {};
 
 const SWITCH_MARGIN = 1.1; // switch only when clearly better: estimates are noisy
 
@@ -35,7 +36,7 @@ function leaderOf(counts) {
 }
 
 /**
- * @param {string} type one of BOT_TYPES / HIDDEN_TYPES
+ * @param {string} type one of BOT_TYPES
  * @param {() => number} rng
  * @param {number} ticks updates per round
  */
@@ -43,11 +44,14 @@ function createBot(type, rng, ticks) {
   const reaction = 1 + Math.floor(rng() * 3); // 1..3 updates before the first move
   const patience = 1 + Math.floor(rng() * 2); // a reason to switch must last this long
   const midpoint = Math.floor(ticks * (0.2 + rng() * 0.4));
-  let urge = 0; // consecutive updates a switch looked worth it
+  const whimStart = Math.floor(rng() * ticks * 0.3);
+  const favorite = Math.floor(rng() * 3);
+  let urge = 0;
+  let seen = -1;
+  let seenSince = 0;
 
   /** 期待値予言: compare "stay" (my points stay as they are) with "switch" (points restart now) */
-  function predictByValue(view, decl, api) {
-    const p = winProbs(view);
+  function predictByValue(view, decl, api, p = winProbs(view)) {
     if (!decl) return api.predict(argmax(p));
     const stay = p[decl.color] * (ticks - decl.tick);
     let alt = -1;
@@ -65,9 +69,6 @@ function createBot(type, rng, ticks) {
     }
   }
 
-  // the old naive predictor: switch every time the leader changes (for comparison)
-  let seen = -1;
-  let seenSince = 0;
   function follow(view, decl, api) {
     const leader = leaderOf(view.counts);
     if (leader !== seen) {
@@ -82,7 +83,9 @@ function createBot(type, rng, ticks) {
     type,
     /**
      * called once per update, before the world steps.
-     * view: observe(world) from ./odds.js; me: { decl }; api: { predict(c), invent(c) }
+     * view: observe(world) from ./odds.js
+     * me:   { decl, local } — local: colors among my cell and its 8 neighbors
+     * api:  { predict(c), invent(c) }
      */
     act(view, me, api) {
       const t = view.tick;
@@ -93,11 +96,29 @@ function createBot(type, rng, ticks) {
           return predictByValue(view, decl, api);
         case 'follow':
           return follow(view, decl, api);
+        case 'whim':
+          if (t < whimStart) return;
+          if (!decl) return api.predict(favorite);
+          if (rng() < 0.03) api.predict(Math.floor(rng() * 3));
+          return;
         case 'inventEarly':
           return api.invent(argmax(winProbs(view)));
+        case 'local': {
+          // own cell excluded: 3+ of the 8 neighbors share a color
+          const nb = me.local.slice();
+          if (me.color !== undefined) nb[me.color]--;
+          const best = argmax(nb);
+          if (nb[best] >= 3) return api.invent(best);
+          return predictByValue(view, decl, api);
+        }
         case 'inventLate':
           if (t >= midpoint) return api.invent(argmax(winProbs(view)));
           return predictByValue(view, decl, api);
+        case 'bandwagon': {
+          const p = winProbs(view);
+          if (p[argmax(p)] >= 0.85) return api.invent(argmax(p));
+          return predictByValue(view, decl, api, p);
+        }
         case 'contrarian':
           return api.invent(view.counts.indexOf(Math.min(...view.counts)));
       }

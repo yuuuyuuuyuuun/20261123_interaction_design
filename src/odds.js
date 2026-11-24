@@ -4,7 +4,7 @@
 // color to become the future?" It looks only at what every player can see on the board:
 //   share    — the color's share of the world
 //   fixed    — the share of inventors fixed to that color
-//   wave     — how much of the world that color's growing waves are still going to sweep
+//   spell    — how much of the world is under the spell of that color's charismas
 // The weights per "updates remaining" bin are fitted from simulations (sim/fit-odds.js).
 
 let MODEL = null;
@@ -21,20 +21,34 @@ function observe(src) {
   const colors = src.opts?.colors || src.colors || 3;
   const counts = new Array(colors).fill(0);
   const fixed = new Array(colors).fill(0);
-  const wave = new Array(colors).fill(0);
+  const spell = new Array(colors).fill(0);
   for (const v of color) counts[v]++;
   if (Array.isArray(src.fixedCells)) for (const i of src.fixedCells) fixed[color[i]]++;
   else if (src.fixed) src.fixed.forEach((f, i) => f && fixed[color[i]]++);
-  for (const w of src.waves || []) {
-    const r = Math.max(0, w.radius);
-    wave[w.color] += (Math.PI * (w.maxRadius * w.maxRadius - r * r)) / size;
+  const R = src.opts?.charismaRadius;
+  for (const c of src.charismas || []) {
+    const r = c.radius ?? R;
+    spell[c.color] += (2 * r + 1) ** 2 / size;
   }
   const ticks = src.opts?.ticks ?? src.ticks;
-  return { tick: src.tick, ticks, remaining: ticks - src.tick, size, counts, fixed, wave };
+  return { tick: src.tick, ticks, remaining: ticks - src.tick, size, counts, fixed, spell };
+}
+
+/** colors among a cell and its 8 neighbors */
+function localCounts(src, cell) {
+  const cols = src.cols;
+  const rows = src.rows;
+  const colors = src.opts?.colors || src.colors || 3;
+  const c = new Array(colors).fill(0);
+  const x0 = cell % cols;
+  const y0 = (cell / cols) | 0;
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) c[src.color[((y0 + dy + rows) % rows) * cols + ((x0 + dx + cols) % cols)]]++;
+  return c;
 }
 
 function features(view, c) {
-  return [view.counts[c] / view.size, view.fixed[c] / view.size, Math.min(1, view.wave[c])];
+  return [view.counts[c] / view.size, view.fixed[c] / view.size, Math.min(1, view.spell[c])];
 }
 
 function binOf(remaining, edges) {
@@ -68,4 +82,4 @@ function winProbs(view, model = MODEL) {
   return softmax(scores);
 }
 
-module.exports = { observe, features, winProbs, binOf, softmax, hasModel: () => Boolean(MODEL) };
+module.exports = { observe, localCounts, features, winProbs, binOf, softmax, hasModel: () => Boolean(MODEL) };

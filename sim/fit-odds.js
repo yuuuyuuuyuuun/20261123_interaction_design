@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { World, DEFAULTS, makeRng } = require('../src/engine');
-const { observe, features, binOf, softmax } = require('../src/odds');
+const { observe, localCounts, features, binOf, softmax } = require('../src/odds');
 
 const ROUNDS = Number(process.argv[2] || 3000);
 const EDGES = [0, 3, 6, 10, 15, 20, 25, 30, 40, 50, 1000]; // bins of "updates remaining"
@@ -19,7 +19,8 @@ function simulate(seed) {
   const plans = Array.from({ length: N }, () => {
     if (rng() >= q) return null;
     const kind = rng();
-    return { at: kind < 0.5 ? 1 + Math.floor(rng() * 3) : Math.floor(rng() * 40), contrarian: kind > 0.85 };
+    const how = kind < 0.4 ? 'leader' : kind < 0.7 ? 'local' : kind < 0.85 ? 'leader' : 'contrarian';
+    return { at: kind < 0.4 || kind >= 0.85 ? 1 + Math.floor(rng() * 3) : Math.floor(rng() * 40), how };
   });
   const samples = [];
   while (!w.finished) {
@@ -27,8 +28,8 @@ function simulate(seed) {
     samples.push(view);
     plans.forEach((pl, p) => {
       if (!pl || w.tick !== pl.at) return;
-      const c = view.counts;
-      w.invent(p, pl.contrarian ? c.indexOf(Math.min(...c)) : c.indexOf(Math.max(...c)));
+      const c = pl.how === 'local' ? localCounts(w, w.playerCell[p]) : view.counts;
+      w.invent(p, pl.how === 'contrarian' ? c.indexOf(Math.min(...c)) : c.indexOf(Math.max(...c)));
     });
     w.step();
   }
@@ -77,7 +78,7 @@ function fit(data) {
 }
 
 const weights = [];
-console.log('残りターン   サンプル  重み[割合, 発明者, 波]          正答率  対数損失(ランダムなら1.10)');
+console.log('残りターン   サンプル  重み[割合, 発明者, カリスマ]          正答率  対数損失(ランダムなら1.10)');
 byBin.forEach((data, b) => {
   const r = fit(data);
   weights.push(r.w);

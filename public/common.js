@@ -31,6 +31,8 @@ class WorldView {
     this.t0 = 0;
     this.dur = 350;
     this.highlight = null; // cell index
+    this.ripples = [];
+    this.lastTick = -1;
     const loop = () => {
       this.draw();
       requestAnimationFrame(loop);
@@ -62,6 +64,7 @@ class WorldView {
     if (!world) {
       this.world = null;
       this.to = null;
+      this.lastTick = -1;
       return;
     }
     const now = performance.now();
@@ -72,7 +75,10 @@ class WorldView {
     this.t0 = now;
     this.world = world;
     this.fixedSet = new Set(world.fixedCells);
-    this.heldSet = new Set(world.heldCells || []);
+    if (world.tick !== this.lastTick) {
+      for (const ev of world.events || []) if (ev.kind === 'movement') this.ripples.push({ ...ev, t0: now });
+      this.lastTick = world.tick;
+    }
     this.nameAt = new Map();
     (world.playerCell || []).forEach((cell, i) => this.nameAt.set(cell, world.names?.[i] ?? ''));
   }
@@ -113,17 +119,38 @@ class WorldView {
       ctx.fill();
     }
 
-    // cells swept up by a movement: a thin frame while they hold the color
-    if (this.heldSet.size) {
-      ctx.strokeStyle = 'rgba(255,255,255,.45)';
-      ctx.lineWidth = Math.max(1, size * 0.07);
-      for (const i of this.heldSet) {
-        if (this.fixedSet.has(i)) continue;
-        const x = ox + (i % cols) * step;
-        const y = oy + Math.floor(i / cols) * step;
-        roundRect(ctx, x + size * 0.18, y + size * 0.18, size * 0.64, size * 0.64, rad * 0.6);
-        ctx.stroke();
+    // charisma: a pulsing aura over the people under its spell (wrapping around the edges)
+    if ((world.charismas || []).length) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(ox - L.gap, oy - L.gap, cols * step + L.gap, world.rows * step + L.gap);
+      ctx.clip();
+      for (const c of world.charismas) {
+        const hex = COLORS[c.color].hex;
+        const side = (2 * c.radius + 1) * step;
+        for (const wx of [-cols, 0, cols])
+          for (const wy of [-world.rows, 0, world.rows]) {
+            const x = ox + (c.x + wx - c.radius) * step - L.gap / 2;
+            const y = oy + (c.y + wy - c.radius) * step - L.gap / 2;
+            if (x > canvas.width || y > canvas.height || x + side < 0 || y + side < 0) continue;
+            ctx.save();
+            ctx.globalAlpha = 0.16 + 0.12 * pulse;
+            ctx.fillStyle = hex;
+            roundRect(ctx, x, y, side, side, step * 0.8);
+            ctx.fill();
+            ctx.globalAlpha = 0.9;
+            ctx.strokeStyle = hex;
+            ctx.lineWidth = Math.max(2, size * 0.14);
+            ctx.shadowColor = hex;
+            ctx.shadowBlur = size;
+            ctx.setLineDash([size * 0.5, size * 0.3]);
+            ctx.lineDashOffset = -now / 30;
+            roundRect(ctx, x, y, side, side, step * 0.8);
+            ctx.stroke();
+            ctx.restore();
+          }
       }
+      ctx.restore();
     }
 
     // players: a dark dot (or their name); inventors: a glowing white frame
@@ -157,27 +184,16 @@ class WorldView {
       }
     }
 
-    // movements: the growing front, and a faint circle showing how far it will grow
-    for (const wv of world.waves || []) {
-      const cx = ox + wv.x * step + size / 2;
-      const cy = oy + wv.y * step + size / 2;
-      const hex = COLORS[wv.color].hex;
+    // movements: an expanding ring
+    this.ripples = this.ripples.filter((rp) => now - rp.t0 < 1200);
+    for (const rp of this.ripples) {
+      const k = (now - rp.t0) / 1200;
       ctx.save();
-      ctx.strokeStyle = hex;
-      ctx.globalAlpha = 0.35;
-      ctx.lineWidth = Math.max(1.5, size * 0.08);
-      ctx.setLineDash([size * 0.3, size * 0.25]);
-      ctx.lineDashOffset = -now / 60;
+      ctx.strokeStyle = COLORS[rp.color].hex;
+      ctx.globalAlpha = 1 - k;
+      ctx.lineWidth = Math.max(3, size * 0.3) * (1 - k * 0.6);
       ctx.beginPath();
-      ctx.arc(cx, cy, wv.maxRadius * step, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 0.95;
-      ctx.lineWidth = Math.max(3, size * 0.28);
-      ctx.shadowColor = hex;
-      ctx.shadowBlur = size * 0.8;
-      ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(0.5, wv.radius) * step + size * 0.1 * pulse, 0, Math.PI * 2);
+      ctx.arc(ox + rp.x * step + size / 2, oy + rp.y * step + size / 2, rp.radius * step * (0.5 + k * 0.8), 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }

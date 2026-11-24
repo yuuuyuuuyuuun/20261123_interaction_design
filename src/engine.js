@@ -5,15 +5,14 @@
 // 世界   : a large torus-shaped rectangle of cells. A few of them are the players;
 //          the rest are the crowd — people who never invent and always flow.
 // 法則   : every free cell, on every update,
-//            - 気まぐれ  (noise)    : with probability `noise`, takes a random color
-//            - 同調      (imitate)  : otherwise, with probability `imitate`, looks at `sample` random
-//                                     neighbors and takes their most common color (ties: random)
+//            - 気まぐれ (noise)   : with probability `noise`, takes a random color
+//            - 同調     (imitate) : otherwise, with probability `imitate`, reconsiders its color
+//                                   by looking at its 8 neighbors (see conform())
 //          and now and then
-//            - ムーブメント (movement) : a color that is behind gets a movement — a wave that grows
-//              from one of its supporters. Cells the wave reaches turn to that color and hold it
-//              for a few updates (like temporary inventors), then flow again. The further the
-//              color is behind, the larger the wave grows (backlash). Waves take time to grow, so
-//              one that starts right before the end stays small; none start early in a round.
+//            - ムーブメント (movement) : a disc of free cells turns into a color that is behind
+//            - カリスマ     (charisma) : an inventor of a color that is behind becomes, for a few
+//                                         updates, enormously persuasive to the people around it
+//          Neither starts in the last 15% of a round.
 // 未来   : the plurality color of the whole world when the round ends
 // 予言   : a declaration that may be changed at any time; the player's cell keeps flowing
 // 発明   : a declaration that can never change; the player's cell is fixed to that color
@@ -27,17 +26,34 @@ const DEFAULTS = {
   boardScale: 16, // board cells ≈ players × boardScale
   minCells: 96, // never smaller than this, so a small class still gets a lively world
   aspect: 4 / 3, // cols : rows
-  imitate: 0.8,
-  sample: 3, // how many neighbors a cell looks at when it conforms (1 = plain imitation)
-  noise: 0.04,
-  movement: 0.08, // probability per update that a movement starts (once fully ramped up)
-  movementRamp: [0.15, 0.5], // no movements before 15% of the round, full rate from 50%
-  movementRadius: [0.06, 0.42], // final radius range, relative to the shorter side of the board
-  movementBacklash: 0.4, // share gap to the leader at which a wave reaches the top of the range
-  movementSpeed: 0.45, // how many cells the wave front advances per update (0 = all at once)
-  movementHold: [3, 5], // updates a reached cell holds the color
-  movementTarget: 'trailing', // 'trailing': only colors that are not ahead | 'any'
-  movementStopAt: Infinity, // (simulation only) no new movements from this update on
+  noise: 0.008,
+  imitate: 0.85,
+  // conformity law
+  law: 'saturate', // 'saturate' | 'sample'
+  //   saturate: a color pulls a cell by n^p / (n^p + half^p), n = neighbors of that color.
+  //             2–3 neighbors are already persuasive; more add little, so a small group of
+  //             3–4 can hold its ground and grow. (Optionally the pull can decline beyond
+  //             `peak` neighbors down to `floor` × its peak value at 8 — tried, but a real
+  //             decline breaks every region into a mosaic, so it is off.)
+  half: 2.35,
+  power: 3,
+  peak: 8,
+  floor: 1,
+  inertia: 0.4, // extra pull of the cell's own color
+  //   sample: look at `sample` random neighbors and take their most common color
+  sample: 3,
+  // ムーブメント
+  movement: 0.05, // probability per update (once ramped up)
+  movementRamp: [0.15, 0.4], // none before 15% of the round, full rate from 40%
+  quietFrom: 0.85, // no new movements or charismas in the last 15% of a round: the end is decided by what everyone can already see
+  movementRadius: [0.1, 0.18], // relative to the shorter side of the board
+  movementTarget: 'trailing', // 'trailing': only colors that are behind | 'any'
+  // カリスマ
+  charisma: 0.22, // probability per update that an inventor of a trailing color gets it
+  charismaRadius: 3, // the people within this many cells (a square) are under its spell
+  charismaTurns: [4, 6],
+  charismaPull: 30, // extra pull toward its color for the people under its spell
+  eventsStopAt: Infinity, // (simulation only) no new movements or charismas from this update on
 };
 
 function makeRng(seed) {
@@ -84,9 +100,12 @@ class World {
           if (dx || dy) nb.push(((y + dy + rows) % rows) * cols + ((x + dx + cols) % cols));
       this.neighbors.push(nb);
     }
+    this.pullTable = []; // saturate law: pull of n neighbors, n = 0..8
+    const hill = (n) => n ** o.power / (n ** o.power + o.half ** o.power);
+    for (let n = 0; n <= 8; n++)
+      this.pullTable.push(n <= o.peak ? hill(n) : hill(o.peak) * (1 - ((1 - o.floor) * (n - o.peak)) / (8 - o.peak)));
     this.color = Array.from({ length: this.size }, () => Math.floor(this.rng() * o.colors));
     this.fixed = new Array(this.size).fill(false);
-    this.heldUntil = new Array(this.size).fill(0); // movement: cell is held while tick < heldUntil
 
     // players are scattered over the board
     const cells = [...Array(this.size).keys()];
@@ -98,30 +117,22 @@ class World {
     this.playerCell = cells.slice(0, players);
     this.decl = new Array(players).fill(null); // { color, tick, invented }
     this.tick = 0;
-    this.events = []; // movements that started on the latest update
-    this.waves = []; // movements that are still growing
+    this.events = []; // movements and charismas that started on the latest update
+    this.charismas = []; // { player, cell, color, until }
+    this.spell = new Array(this.size).fill(-1); // charisma color over each cell (-1 none)
     this.history = [this.counts()];
   }
 
-  counts() {
+  counts(color = this.color) {
     const c = new Array(this.opts.colors).fill(0);
-    for (const v of this.color) c[v]++;
+    for (const v of color) c[v]++;
     return c;
   }
 
   /** plurality color, or -1 on a tie */
   leader(counts = this.counts()) {
-    let best = -1;
-    let bestN = -1;
-    let tie = false;
-    counts.forEach((v, k) => {
-      if (v > bestN) {
-        best = k;
-        bestN = v;
-        tie = false;
-      } else if (v === bestN) tie = true;
-    });
-    return tie ? -1 : best;
+    const max = Math.max(...counts);
+    return counts.filter((v) => v === max).length > 1 ? -1 : counts.indexOf(max);
   }
 
   get finished() {
@@ -160,113 +171,137 @@ class World {
     const cur = this.color;
     const next = cur.slice();
     for (let i = 0; i < this.size; i++) {
-      if (this.fixed[i] || this.heldUntil[i] > this.tick) continue;
+      if (this.fixed[i]) continue;
+      const spelled = this.spell[i] >= 0;
       const r = rng();
-      if (r < o.noise) next[i] = Math.floor(rng() * o.colors);
-      else if (r < o.noise + o.imitate) next[i] = this.conform(i, cur);
+      if (!spelled && r < o.noise) next[i] = Math.floor(rng() * o.colors);
+      else if (spelled || r < o.noise + o.imitate) next[i] = this.conform(i, cur);
     }
 
     this.events = [];
-    if (rng() < o.movement * this.movementRamp() && !(this.tick >= o.movementStopAt)) this.startMovement(cur);
-    this.growWaves(next);
+    const counts = this.counts(cur);
+    const quiet = this.tick >= o.eventsStopAt || this.tick >= o.ticks * o.quietFrom;
+    if (rng() < o.movement * this.ramp(o.movementRamp) && !quiet) this.paint(cur, next, counts);
+    this.charismas = this.charismas.filter((c) => c.until > this.tick + 1);
+    if (rng() < o.charisma && !quiet) this.inspire(counts);
+    this.castSpells();
 
     this.color = next;
     this.tick++;
     this.history.push(this.counts());
   }
 
-  /** 0 → 1 over the round: movements are a comeback mechanism, not needed at the start */
-  movementRamp() {
-    const [a, b] = this.opts.movementRamp;
+  /** 0 → 1 over the round */
+  ramp([a, b]) {
     const f = this.tick / this.opts.ticks;
     if (f < a) return 0;
     return b > a ? Math.min(1, (f - a) / (b - a)) : 1;
   }
 
-  startMovement(cur) {
+  /** colors that are not in the lead */
+  trailing(counts) {
+    const max = Math.max(...counts);
+    const behind = [...counts.keys()].filter((c) => counts[c] < max);
+    return behind.length ? behind : [...counts.keys()];
+  }
+
+  /** ムーブメント: a disc of free cells turns into a color that is behind, at once */
+  paint(cur, next, counts) {
     const o = this.opts;
     const rng = this.rng;
-    // which color: one that is not ahead (or any, for comparison)
-    const counts = new Array(o.colors).fill(0);
-    for (const v of cur) counts[v]++;
-    const max = Math.max(...counts);
-    let choices = [...counts.keys()];
-    if (o.movementTarget === 'trailing') {
-      const behind = choices.filter((c) => counts[c] < max);
-      if (behind.length) choices = behind;
-    }
+    const choices = o.movementTarget === 'trailing' ? this.trailing(counts) : [...counts.keys()];
     const color = choices[Math.floor(rng() * choices.length)];
-    // where: around someone who already holds that color, if there is anyone
-    const supporters = [];
-    for (let i = 0; i < this.size; i++) if (cur[i] === color) supporters.push(i);
-    const center = supporters.length ? supporters[Math.floor(rng() * supporters.length)] : Math.floor(rng() * this.size);
-    // how large it will grow
     const short = Math.min(this.cols, this.rows);
     const [ra, rb] = o.movementRadius;
-    const k =
-      o.movementBacklash > 0
-        ? Math.min(1, (max - counts[color]) / this.size / o.movementBacklash) * (0.8 + 0.2 * rng())
-        : rng();
-    const [ha, hb] = o.movementHold;
-    const wave = {
-      x: center % this.cols,
-      y: (center / this.cols) | 0,
-      color,
-      radius: -1, // current front
-      maxRadius: Math.max(1, short * (ra + k * (rb - ra))),
-      hold: ha + Math.floor(rng() * (hb - ha + 1)),
-    };
-    this.waves.push(wave);
-    this.events.push(wave);
+    const radius = Math.max(1, short * (ra + rng() * (rb - ra)));
+    const cx = Math.floor(rng() * this.cols);
+    const cy = Math.floor(rng() * this.rows);
+    for (let i = 0; i < this.size; i++) {
+      if (this.fixed[i]) continue;
+      let dx = Math.abs((i % this.cols) - cx);
+      let dy = Math.abs(((i / this.cols) | 0) - cy);
+      dx = Math.min(dx, this.cols - dx);
+      dy = Math.min(dy, this.rows - dy);
+      if (dx * dx + dy * dy <= radius * radius) next[i] = color;
+    }
+    this.events.push({ kind: 'movement', x: cx, y: cy, radius, color });
   }
 
-  /** advance every wave front and sweep the cells it passes */
-  growWaves(next) {
+  /** カリスマ: one inventor of a color that is behind becomes persuasive for a while */
+  inspire(counts) {
     const o = this.opts;
-    for (const w of this.waves) {
-      const from = w.radius;
-      const to = o.movementSpeed > 0 ? Math.min(w.maxRadius, Math.max(1, from + o.movementSpeed)) : w.maxRadius;
-      for (let i = 0; i < this.size; i++) {
-        if (this.fixed[i]) continue;
-        let dx = Math.abs((i % this.cols) - w.x);
-        let dy = Math.abs(((i / this.cols) | 0) - w.y);
-        dx = Math.min(dx, this.cols - dx);
-        dy = Math.min(dy, this.rows - dy);
-        const d2 = dx * dx + dy * dy;
-        if (d2 <= to * to && (from < 0 || d2 > from * from)) {
-          next[i] = w.color;
-          if (w.hold > 0) this.heldUntil[i] = this.tick + 1 + w.hold;
-        }
-      }
-      w.radius = to;
-    }
-    this.waves = this.waves.filter((w) => w.radius < w.maxRadius);
+    const behind = new Set(this.trailing(counts));
+    const busy = new Set(this.charismas.map((c) => c.player));
+    const eligible = [];
+    this.decl.forEach((d, p) => d?.invented && behind.has(d.color) && !busy.has(p) && eligible.push(p));
+    if (!eligible.length) return;
+    const p = eligible[Math.floor(this.rng() * eligible.length)];
+    const [a, b] = o.charismaTurns;
+    const turns = a + Math.floor(this.rng() * (b - a + 1));
+    const c = { player: p, cell: this.playerCell[p], color: this.decl[p].color, until: this.tick + 1 + turns };
+    this.charismas.push(c);
+    this.events.push({
+      kind: 'charisma',
+      x: c.cell % this.cols,
+      y: (c.cell / this.cols) | 0,
+      radius: o.charismaRadius,
+      color: c.color,
+      player: p,
+    });
   }
 
-  /** the most common color among `sample` distinct neighbors (ties broken at random) */
+  castSpells() {
+    this.spell.fill(-1);
+    const R = this.opts.charismaRadius;
+    for (const c of this.charismas) {
+      const x0 = c.cell % this.cols;
+      const y0 = (c.cell / this.cols) | 0;
+      for (let dy = -R; dy <= R; dy++)
+        for (let dx = -R; dx <= R; dx++) {
+          const j = ((y0 + dy + this.rows) % this.rows) * this.cols + ((x0 + dx + this.cols) % this.cols);
+          this.spell[j] = c.color;
+        }
+    }
+  }
+
+  /** the color a free cell takes when it reconsiders */
   conform(i, cur) {
-    const k = Math.min(8, this.opts.sample);
+    const o = this.opts;
     const nb = this.neighbors[i];
-    if (k <= 1) return cur[nb[Math.floor(this.rng() * 8)]];
-    const pick = this._pick || (this._pick = [0, 1, 2, 3, 4, 5, 6, 7]);
-    const cnt = this._cnt || (this._cnt = new Array(this.opts.colors));
+    const cnt = this._cnt || (this._cnt = new Array(o.colors));
+    if (o.law === 'sample') {
+      const pick = this._pick || (this._pick = [0, 1, 2, 3, 4, 5, 6, 7]);
+      cnt.fill(0);
+      for (let s = 0; s < o.sample; s++) {
+        const j = s + Math.floor(this.rng() * (8 - s));
+        [pick[s], pick[j]] = [pick[j], pick[s]];
+        cnt[cur[nb[pick[s]]]]++;
+      }
+      if (this.spell[i] >= 0) cnt[this.spell[i]] += o.charismaPull * 2;
+      let best = 0;
+      let ties = 0;
+      let choice = cur[i];
+      for (let c = 0; c < cnt.length; c++) {
+        if (cnt[c] > best) {
+          best = cnt[c];
+          choice = c;
+          ties = 1;
+        } else if (cnt[c] === best && best > 0 && this.rng() < 1 / ++ties) choice = c;
+      }
+      return choice;
+    }
+    // saturate
     cnt.fill(0);
-    for (let s = 0; s < k; s++) {
-      const j = s + Math.floor(this.rng() * (8 - s));
-      [pick[s], pick[j]] = [pick[j], pick[s]];
-      cnt[cur[nb[pick[s]]]]++;
+    for (let s = 0; s < 8; s++) cnt[cur[nb[s]]]++;
+    const w = this._w || (this._w = new Array(o.colors));
+    let total = 0;
+    for (let c = 0; c < o.colors; c++) {
+      w[c] = this.pullTable[cnt[c]] + (c === cur[i] ? o.inertia : 0) + (c === this.spell[i] ? o.charismaPull : 0);
+      total += w[c];
     }
-    let best = 0;
-    let ties = 0;
-    let choice = 0;
-    for (let c = 0; c < cnt.length; c++) {
-      if (cnt[c] > best) {
-        best = cnt[c];
-        choice = c;
-        ties = 1;
-      } else if (cnt[c] === best && best > 0 && this.rng() < 1 / ++ties) choice = c;
-    }
-    return choice;
+    let r = this.rng() * total;
+    for (let c = 0; c < o.colors; c++) if ((r -= w[c]) < 0) return c;
+    return cur[i];
   }
 
   /** score per player = updates remaining at the final declaration, if it was right */
@@ -285,13 +320,19 @@ class World {
       colors: this.opts.colors,
       color: this.color,
       fixed: this.fixed,
-      held: this.heldUntil.map((u) => u > this.tick),
       playerCell: this.playerCell,
       tick: this.tick,
       ticks: this.opts.ticks,
       counts: this.counts(),
-      events: this.events.map((w) => ({ x: w.x, y: w.y, color: w.color, maxRadius: w.maxRadius })),
-      waves: this.waves.map((w) => ({ x: w.x, y: w.y, color: w.color, radius: w.radius, maxRadius: w.maxRadius })),
+      events: this.events,
+      charismas: this.charismas.map((c) => ({
+        player: c.player,
+        x: c.cell % this.cols,
+        y: (c.cell / this.cols) | 0,
+        radius: this.opts.charismaRadius,
+        color: c.color,
+        left: c.until - this.tick,
+      })),
     };
   }
 }

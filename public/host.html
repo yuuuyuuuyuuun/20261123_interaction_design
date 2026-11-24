@@ -40,8 +40,7 @@
   .legend .sw.p::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: rgba(10,12,20,.7); }
   .legend .sw.inv { box-shadow: 0 0 10px var(--red); outline: 2px solid #fff; outline-offset: -4px; background: var(--red); }
   .legend .sw.mv { background: transparent; border: 3px solid var(--yellow); border-radius: 50%; box-shadow: 0 0 8px var(--yellow); }
-  .legend .sw.hd { background: var(--yellow); }
-  .legend .sw.hd::after { content: ''; position: absolute; inset: 4px; border-radius: 2px; border: 1.5px solid rgba(255,255,255,.7); }
+  .legend .sw.ch { background: rgba(76,141,255,.35); border: 2px dashed var(--blue); box-shadow: 0 0 8px var(--blue); }
   .controls { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
   .settings { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; font-size: 14px; align-items: center; }
   .settings .sec { grid-column: 1 / -1; font-size: 12px; letter-spacing: .12em; color: var(--muted); margin-top: 6px; }
@@ -82,8 +81,8 @@
             <p class="title">予言するか。<br>発明するか。</p>
             <ol class="rules">
               <li>あなたは世界の<b>1マス</b>。世界には、発明しない<b>群衆</b>もいます。</li>
-              <li>マスは時々<b>近くの3人を見て多い色に合わせ</b>、たまに<b>気まぐれ</b>に色を変えます。</li>
-              <li>中盤からは、負けている色に<b>ムーブメント</b>（熱狂の波）が起こり、少しずつ広がります。<b>差が大きいほど大きく育ちます</b>。</li>
+              <li>マスは周りの色に染まります。<b>同じ色が2〜3人いれば十分</b>なので、小さな塊でも根付いて広がります。</li>
+              <li>負けている色の発明者には、ときどき<b>カリスマ</b>が宿り、数ターン周りを強く染めます。小さな<b>ムーブメント</b>も起こります（終盤は起きません）。</li>
               <li>終了時に<b>最も多い色</b>が「未来」。<b>早く言い当てるほど高得点</b>。</li>
               <li><b>予言</b>はいつでも変えられる。あなたは流され続ける。</li>
               <li><b>発明</b>は取り消せない。あなたはその色で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
@@ -135,8 +134,8 @@
       <div><span class="sw"></span>群衆（発明しない人々）</div>
       <div><span class="sw p"></span>プレイヤー（予言者・未宣言）</div>
       <div><span class="sw inv"></span>発明者（もう色が変わらない）</div>
-      <div><span class="sw mv"></span>ムーブメント（波が点線の円まで広がる）</div>
-      <div><span class="sw hd"></span>熱狂中（数ターン色が変わらない）</div>
+      <div><span class="sw ch"></span>カリスマ（負けている色の発明者が周りを強く染める）</div>
+      <div><span class="sw mv"></span>ムーブメント（一帯が負けている色に）</div>
     </div>
     </div>
 

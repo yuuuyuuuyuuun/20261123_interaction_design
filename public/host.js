@@ -87,8 +87,9 @@ function render() {
   view.set(ph === 'lobby' ? null : s.world);
   if (ph === 'playing' && s.world?.events?.length && s.world.tick !== lastEventTick) {
     lastEventTick = s.world.tick;
-    const c = COLORS[s.world.events[0].color];
-    toast(`${c.name}のムーブメントが始まった`, c.hex);
+    const ev = s.world.events[s.world.events.length - 1];
+    const c = COLORS[ev.color];
+    toast(ev.kind === 'charisma' ? `${s.world.names[ev.player]} にカリスマが宿った（${c.name}）` : `${c.name}のムーブメント`, c.hex);
   }
 
   $('roundLabel').textContent = s.round ? `${yearOf(s.round)}年代（${s.round}/${s.rounds}）` : `全${s.rounds}ラウンド`;

@@ -148,6 +148,9 @@ function renderPlay(s, me) {
     (decl && !decl.invented ? ` ・ 予言：<b style="color:${COLORS[decl.color].hex}">${COLORS[decl.color].name}</b>（当たれば +${s.ticks - decl.tick}）` : '');
 
   const invented = decl?.invented;
+  const spell = (s.world.charismas || []).find((c) => c.player === me.index);
+  if (spell)
+    $('meLine').innerHTML = `<b style="color:${COLORS[spell.color].hex}">カリスマが宿った！</b> 周りの人があなたの色に染まりやすい（あと${spell.left}ターン）`;
   $('controls').classList.toggle('hidden', !!invented);
   $('fixedBox').classList.toggle('hidden', !invented);
   if (invented) {

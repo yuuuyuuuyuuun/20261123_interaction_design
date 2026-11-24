@@ -1,7 +1,7 @@
 'use strict';
 const { World, makeRng } = require('../src/engine');
 const { createBot, BOT_TYPES } = require('../src/bots');
-const { observe } = require('../src/odds');
+const { observe, localCounts } = require('../src/odds');
 
 /**
  * Plays one round with bots.
@@ -23,7 +23,8 @@ function playRound(types, opts, seed, hooks = {}) {
     const view = observe(w);
     bots.forEach((b, p) => {
       if (!b) return;
-      b.act(view, { decl: w.decl[p] }, { predict: (c) => w.predict(p, c), invent: (c) => w.invent(p, c) });
+      const cell = w.playerCell[p];
+      b.act(view, { decl: w.decl[p], local: localCounts(w, cell), color: w.color[cell] }, { predict: (c) => w.predict(p, c), invent: (c) => w.invent(p, c) });
     });
     const before = w.color;
     w.step();
