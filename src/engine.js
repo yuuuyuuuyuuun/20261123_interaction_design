@@ -59,7 +59,7 @@ const DEFAULTS = {
   //   sample: look at `sample` random neighbors and take their most common color
   sample: 3,
   // ムーブメント
-  movement: 0.03, // probability per update (once ramped up): rare, so that the board is mostly moved by people
+  movement: 0.01, // probability per update (once ramped up): rare, so that the board is mostly moved by people
   movementRamp: [0.15, 0.4], // none before 15% of the round, full rate from 40%
   quietFrom: 0.85, // no new movements or charismas in the last 15% of a round: the end is decided by what everyone can already see
   movementArea: [0.25, 0.5], // share of the board one movement paints (a disc), whatever the board size
@@ -398,6 +398,24 @@ class World {
       d && future >= 0 && d.color === future ? this.opts.ticks - d.tick : 0
     );
     return { future, counts: this.counts(), scores };
+  }
+
+  /** (simulations) an independent copy of this world that continues with its own random stream */
+  clone(seed) {
+    const w = Object.create(World.prototype);
+    Object.assign(w, this);
+    w.color = this.color.slice();
+    w.fixed = this.fixed.slice();
+    w.decl = this.decl.map((d) => d && { ...d });
+    w.charismas = this.charismas.map((c) => ({ ...c }));
+    w.spell = this.spell.slice();
+    w.history = this.history.slice();
+    w.events = [];
+    w.rng = makeRng(seed);
+    delete w._cnt;
+    delete w._w;
+    delete w._pick;
+    return w;
   }
 
   snapshot() {

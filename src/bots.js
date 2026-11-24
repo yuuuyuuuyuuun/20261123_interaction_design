@@ -15,9 +15,9 @@ const BOT_TYPES = {
   follow: { label: '追従予言', short: '追従', desc: '多数派を予言し、多数派が入れ替わるたびに乗り換える' },
   whim: { label: '気まぐれ予言', short: '気分', desc: '好きな色を予言し、ときどき気が変わる' },
   mixed: {
-    label: '予言→発明',
+    label: '予言/発明',
     short: '混成',
-    desc: '勝ちそうな色がはっきりしていれば最初から発明し、そうでなければ予言する。乗り換えるときは発明で乗り換える',
+    desc: '期待値予言と同じく判断し、得な場面だけ発明する（勝率50%以上の色を最初に選ぶとき、負けている色へ乗り換えるとき）',
   },
   inventEarly: { label: '早期発明', short: '早発', desc: '開始直後に、勝ちそうな色を発明する' },
   local: { label: '地元発明', short: '地元', desc: '自分の周りに仲間が3人以上いる色を、その場で発明する' },
@@ -122,17 +122,23 @@ function createBot(type, rng, ticks, opts = {}) {
           return;
         case 'inventEarly':
           return api.invent(choose(winProbs(view), me.local, me.color));
-        // mixed: predict first; a switch is made by inventing (it restarts the points either way,
-        // so inventing costs nothing more and adds influence). With opts.clear, invent at once
-        // when the best color's chance is already at least that high.
+        // mixed: decides like 期待値予言, but declares by inventing where inventing pays off.
+        // Measured by branching the same board into "invent" and "predict" (sim/invent-value.js):
+        //   first declaration: inventing gains when the color's chance is 50% or more
+        //   switching: inventing gains when the new color is behind (only inventors of a
+        //   trailing color can become a charisma) and its chance is below 60%
+        // opts (simulations): { firstAt, switchBelow }
         case 'mixed': {
           const p = winProbs(view);
-          const clear = 'clear' in opts ? opts.clear : 0.55;
-          if (!decl && clear !== undefined) {
-            const c = choose(p, me.local, me.color);
-            if (p[c] >= clear) return api.invent(c);
-          }
-          return predictByValue(view, decl, api, p, me, api.invent);
+          const max = Math.max(...view.counts);
+          const firstAt = opts.firstAt ?? 0.5;
+          const switchBelow = opts.switchBelow ?? 0.6;
+          const declare = (c) => {
+            const invent = decl ? view.counts[c] < max && p[c] < switchBelow : p[c] >= firstAt;
+            return invent ? api.invent(c) : api.predict(c);
+          };
+          if (!decl) return declare(choose(p, me.local, me.color));
+          return predictByValue(view, decl, api, p, me, declare);
         }
         case 'inventAt': // simulations: wait `opts.wait` updates, declaring nothing, then invent
           if (t >= (opts.wait ?? 0)) api.invent(choose(winProbs(view), me.local, me.color));

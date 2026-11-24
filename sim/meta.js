@@ -12,10 +12,10 @@ const KINDS = {
   inv: [0, 2, 4, 6].map((w) => ({ key: `発明 ${w}ターン待つ`, type: 'inventAt', opts: { wait: w } })),
   pred: [1.0, 1.2, 1.5].map((m) => ({ key: `予言 乗り換え基準×${m.toFixed(1)}`, type: 'predict', opts: { margin: m } })),
   mix: [
-    { key: '混成 予言→発明で乗り換え×1.0', type: 'mixed', opts: { margin: 1.0 } },
-    { key: '混成 予言→発明で乗り換え×1.2', type: 'mixed', opts: { margin: 1.2 } },
-    { key: '混成 勝率45%以上なら即発明', type: 'mixed', opts: { margin: 1.0, clear: 0.45 } },
-    { key: '混成 勝率55%以上なら即発明', type: 'mixed', opts: { margin: 1.0, clear: 0.55 } },
+    { key: '混成 得な場面だけ発明×1.0', type: 'mixed', opts: { margin: 1.0 } },
+    { key: '混成 得な場面だけ発明×1.2', type: 'mixed', opts: { margin: 1.2 } },
+    { key: '混成 最初は勝率40%以上で発明', type: 'mixed', opts: { margin: 1.0, firstAt: 0.4 } },
+    { key: '混成 最初は勝率60%以上で発明', type: 'mixed', opts: { margin: 1.0, firstAt: 0.6 } },
   ],
 };
 
