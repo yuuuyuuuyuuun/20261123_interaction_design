@@ -88,7 +88,7 @@ function render() {
   if (ph === 'playing' && s.world?.events?.length && s.world.tick !== lastEventTick) {
     lastEventTick = s.world.tick;
     const c = COLORS[s.world.events[0].color];
-    toast(`ムーブメント：${c.name}`, c.hex);
+    toast(`${c.name}のムーブメントが始まった`, c.hex);
   }
 
   $('roundLabel').textContent = s.round ? `${yearOf(s.round)}年代（${s.round}/${s.rounds}）` : `全${s.rounds}ラウンド`;

@@ -8,17 +8,19 @@
 //            - 気まぐれ  (noise)    : with probability `noise`, takes a random color
 //            - 同調      (imitate)  : otherwise, with probability `imitate`, looks at `sample` random
 //                                     neighbors and takes their most common color (ties: random)
-//          and now and then the whole world is shaken by
-//            - 流行・災害 (movement) : a disc of free cells turns into one color at once
+//          and now and then
+//            - ムーブメント (movement) : a color that is behind gets a movement — a wave that grows
+//              from one of its supporters. Cells the wave reaches turn to that color and hold it
+//              for a few updates (like temporary inventors), then flow again. The further the
+//              color is behind, the larger the wave grows (backlash). Waves take time to grow, so
+//              one that starts right before the end stays small; none start early in a round.
 // 未来   : the plurality color of the whole world when the round ends
 // 予言   : a declaration that may be changed at any time; the player's cell keeps flowing
 // 発明   : a declaration that can never change; the player's cell is fixed to that color
-//          and is immune to every law above
+//          for good and is immune to every law above
 // 得点   : updates remaining at the moment of the final declaration, if it was right
 
-// Chosen by simulation (see sim/ and README): lively for the whole round, the early
-// leader wins only ~40%, one inventor alone barely moves the world, a whole class
-// inventing the same color together usually — but not always — gets its way.
+// Chosen by simulation (see sim/ and README).
 const DEFAULTS = {
   colors: 3,
   ticks: 60, // updates per round
@@ -28,8 +30,14 @@ const DEFAULTS = {
   imitate: 0.8,
   sample: 3, // how many neighbors a cell looks at when it conforms (1 = plain imitation)
   noise: 0.04,
-  movement: 0.12, // probability per update that a movement happens
-  movementRadius: [0.22, 0.45], // radius range, relative to the shorter side of the board
+  movement: 0.08, // probability per update that a movement starts (once fully ramped up)
+  movementRamp: [0.15, 0.5], // no movements before 15% of the round, full rate from 50%
+  movementRadius: [0.06, 0.42], // final radius range, relative to the shorter side of the board
+  movementBacklash: 0.4, // share gap to the leader at which a wave reaches the top of the range
+  movementSpeed: 0.45, // how many cells the wave front advances per update (0 = all at once)
+  movementHold: [3, 5], // updates a reached cell holds the color
+  movementTarget: 'trailing', // 'trailing': only colors that are not ahead | 'any'
+  movementStopAt: Infinity, // (simulation only) no new movements from this update on
 };
 
 function makeRng(seed) {
@@ -78,6 +86,7 @@ class World {
     }
     this.color = Array.from({ length: this.size }, () => Math.floor(this.rng() * o.colors));
     this.fixed = new Array(this.size).fill(false);
+    this.heldUntil = new Array(this.size).fill(0); // movement: cell is held while tick < heldUntil
 
     // players are scattered over the board
     const cells = [...Array(this.size).keys()];
@@ -89,7 +98,8 @@ class World {
     this.playerCell = cells.slice(0, players);
     this.decl = new Array(players).fill(null); // { color, tick, invented }
     this.tick = 0;
-    this.events = []; // movements of the latest update
+    this.events = []; // movements that started on the latest update
+    this.waves = []; // movements that are still growing
     this.history = [this.counts()];
   }
 
@@ -150,45 +160,98 @@ class World {
     const cur = this.color;
     const next = cur.slice();
     for (let i = 0; i < this.size; i++) {
-      if (this.fixed[i]) continue;
+      if (this.fixed[i] || this.heldUntil[i] > this.tick) continue;
       const r = rng();
       if (r < o.noise) next[i] = Math.floor(rng() * o.colors);
       else if (r < o.noise + o.imitate) next[i] = this.conform(i, cur);
     }
 
     this.events = [];
-    if (rng() < o.movement) {
-      const short = Math.min(this.cols, this.rows);
-      const [a, b] = o.movementRadius;
-      const radius = short * (a + rng() * (b - a));
-      const cx = Math.floor(rng() * this.cols);
-      const cy = Math.floor(rng() * this.rows);
-      const color = Math.floor(rng() * o.colors);
-      for (let i = 0; i < this.size; i++) {
-        if (this.fixed[i]) continue;
-        let dx = Math.abs((i % this.cols) - cx);
-        let dy = Math.abs(((i / this.cols) | 0) - cy);
-        dx = Math.min(dx, this.cols - dx);
-        dy = Math.min(dy, this.rows - dy);
-        if (dx * dx + dy * dy <= radius * radius) next[i] = color;
-      }
-      this.events.push({ x: cx, y: cy, radius, color });
-    }
+    if (rng() < o.movement * this.movementRamp() && !(this.tick >= o.movementStopAt)) this.startMovement(cur);
+    this.growWaves(next);
 
     this.color = next;
     this.tick++;
     this.history.push(this.counts());
   }
 
-  /** the most common color among `sample` distinct random neighbors (ties broken at random) */
+  /** 0 → 1 over the round: movements are a comeback mechanism, not needed at the start */
+  movementRamp() {
+    const [a, b] = this.opts.movementRamp;
+    const f = this.tick / this.opts.ticks;
+    if (f < a) return 0;
+    return b > a ? Math.min(1, (f - a) / (b - a)) : 1;
+  }
+
+  startMovement(cur) {
+    const o = this.opts;
+    const rng = this.rng;
+    // which color: one that is not ahead (or any, for comparison)
+    const counts = new Array(o.colors).fill(0);
+    for (const v of cur) counts[v]++;
+    const max = Math.max(...counts);
+    let choices = [...counts.keys()];
+    if (o.movementTarget === 'trailing') {
+      const behind = choices.filter((c) => counts[c] < max);
+      if (behind.length) choices = behind;
+    }
+    const color = choices[Math.floor(rng() * choices.length)];
+    // where: around someone who already holds that color, if there is anyone
+    const supporters = [];
+    for (let i = 0; i < this.size; i++) if (cur[i] === color) supporters.push(i);
+    const center = supporters.length ? supporters[Math.floor(rng() * supporters.length)] : Math.floor(rng() * this.size);
+    // how large it will grow
+    const short = Math.min(this.cols, this.rows);
+    const [ra, rb] = o.movementRadius;
+    const k =
+      o.movementBacklash > 0
+        ? Math.min(1, (max - counts[color]) / this.size / o.movementBacklash) * (0.8 + 0.2 * rng())
+        : rng();
+    const [ha, hb] = o.movementHold;
+    const wave = {
+      x: center % this.cols,
+      y: (center / this.cols) | 0,
+      color,
+      radius: -1, // current front
+      maxRadius: Math.max(1, short * (ra + k * (rb - ra))),
+      hold: ha + Math.floor(rng() * (hb - ha + 1)),
+    };
+    this.waves.push(wave);
+    this.events.push(wave);
+  }
+
+  /** advance every wave front and sweep the cells it passes */
+  growWaves(next) {
+    const o = this.opts;
+    for (const w of this.waves) {
+      const from = w.radius;
+      const to = o.movementSpeed > 0 ? Math.min(w.maxRadius, Math.max(1, from + o.movementSpeed)) : w.maxRadius;
+      for (let i = 0; i < this.size; i++) {
+        if (this.fixed[i]) continue;
+        let dx = Math.abs((i % this.cols) - w.x);
+        let dy = Math.abs(((i / this.cols) | 0) - w.y);
+        dx = Math.min(dx, this.cols - dx);
+        dy = Math.min(dy, this.rows - dy);
+        const d2 = dx * dx + dy * dy;
+        if (d2 <= to * to && (from < 0 || d2 > from * from)) {
+          next[i] = w.color;
+          if (w.hold > 0) this.heldUntil[i] = this.tick + 1 + w.hold;
+        }
+      }
+      w.radius = to;
+    }
+    this.waves = this.waves.filter((w) => w.radius < w.maxRadius);
+  }
+
+  /** the most common color among `sample` distinct neighbors (ties broken at random) */
   conform(i, cur) {
-    const k = this.opts.sample;
+    const k = Math.min(8, this.opts.sample);
     const nb = this.neighbors[i];
     if (k <= 1) return cur[nb[Math.floor(this.rng() * 8)]];
     const pick = this._pick || (this._pick = [0, 1, 2, 3, 4, 5, 6, 7]);
     const cnt = this._cnt || (this._cnt = new Array(this.opts.colors));
     cnt.fill(0);
-    for (let s = 0; s < k && s < 8; s++) {
+    for (let s = 0; s < k; s++) {
       const j = s + Math.floor(this.rng() * (8 - s));
       [pick[s], pick[j]] = [pick[j], pick[s]];
       cnt[cur[nb[pick[s]]]]++;
@@ -222,11 +285,13 @@ class World {
       colors: this.opts.colors,
       color: this.color,
       fixed: this.fixed,
+      held: this.heldUntil.map((u) => u > this.tick),
       playerCell: this.playerCell,
       tick: this.tick,
       ticks: this.opts.ticks,
       counts: this.counts(),
-      events: this.events,
+      events: this.events.map((w) => ({ x: w.x, y: w.y, color: w.color, maxRadius: w.maxRadius })),
+      waves: this.waves.map((w) => ({ x: w.x, y: w.y, color: w.color, radius: w.radius, maxRadius: w.maxRadius })),
     };
   }
 }

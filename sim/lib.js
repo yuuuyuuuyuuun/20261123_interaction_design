@@ -1,6 +1,7 @@
 'use strict';
 const { World, makeRng } = require('../src/engine');
-const { createBot } = require('../src/bots');
+const { createBot, BOT_TYPES } = require('../src/bots');
+const { observe } = require('../src/odds');
 
 /**
  * Plays one round with bots.
@@ -17,14 +18,16 @@ function playRound(types, opts, seed, hooks = {}) {
   let changed = 0;
   let leaderChanges = 0;
   let prevLeader = w.leader();
+  let movements = 0;
   while (!w.finished) {
-    const view = { tick: w.tick, counts: w.counts() };
+    const view = observe(w);
     bots.forEach((b, p) => {
       if (!b) return;
       b.act(view, { decl: w.decl[p] }, { predict: (c) => w.predict(p, c), invent: (c) => w.invent(p, c) });
     });
     const before = w.color;
     w.step();
+    movements += w.events.length;
     for (let i = 0; i < w.size; i++) if (before[i] !== w.color[i]) changed++;
     const l = w.leader();
     leaders.push(l);
@@ -39,6 +42,7 @@ function playRound(types, opts, seed, hooks = {}) {
     leaders,
     activity: changed / (w.size * w.opts.ticks),
     leaderChanges,
+    movements,
     margin: (sorted[0] - sorted[1]) / w.size,
   };
 }
@@ -51,16 +55,17 @@ function evaluate(opts, { N = 30, R = 300, seed = 1 } = {}) {
   const out = {};
   // A. no inventors at all
   {
-    const act = [], lc = [], m = [], hit = { 3: 0, 10: 0, 30: 0, 50: 0 }, ties = [];
+    const act = [], lc = [], m = [], hit = { 3: 0, 10: 0, 30: 0, 40: 0, 50: 0, 55: 0 }, ties = [], mv = [];
     for (let r = 0; r < R; r++) {
       const g = playRound(new Array(N).fill('follow'), opts, seed * 1e6 + r);
       act.push(g.activity); lc.push(g.leaderChanges); m.push(g.margin);
-      for (const t of [3, 10, 30, 50]) if (g.leaders[t] === g.res.future) hit[t]++;
+      mv.push(g.movements);
+      for (const t of [3, 10, 30, 40, 50, 55]) if (g.leaders[t] === g.res.future) hit[t]++;
       ties.push(g.res.future < 0 ? 1 : 0);
     }
     Object.assign(out, {
       activity: mean(act), leaderChanges: mean(lc), margin: mean(m), ties: mean(ties),
-      keep3: hit[3] / R, keep10: hit[10] / R, keep30: hit[30] / R, keep50: hit[50] / R,
+      keep3: hit[3] / R, keep10: hit[10] / R, keep30: hit[30] / R, keep40: hit[40] / R, keep50: hit[50] / R, keep55: hit[55] / R, movements: mean(mv),
     });
   }
   // B. a lone inventor of a random color at t=0, everyone else follows
@@ -94,10 +99,12 @@ function evaluate(opts, { N = 30, R = 300, seed = 1 } = {}) {
     }
     out[tag] = Object.fromEntries(Object.entries(score).map(([k, v]) => [k, mean(v)]));
   };
-  const ALL = ['follow', 'wait', 'inventEarly', 'inventLate', 'contrarian'];
+  const ALL = Object.keys(BOT_TYPES);
   mix((rng) => ALL[Math.floor(rng() * ALL.length)], 'mixed');
-  mix((rng) => (rng() < 0.7 ? 'inventEarly' : 'follow'), 'herdMix');
-  mix((rng) => (rng() < 0.1 ? 'inventEarly' : 'follow'), 'fewMix');
+  mix((rng) => (rng() < 0.7 ? 'inventEarly' : 'predict'), 'herdMix');
+  mix((rng) => (rng() < 0.1 ? 'inventEarly' : 'predict'), 'fewMix');
+  // the value-based predictor against the naive one, in the same worlds
+  mix((rng) => { const r = rng(); return r < 0.25 ? 'predict' : r < 0.5 ? 'follow' : ALL[Math.floor(rng() * ALL.length)]; }, 'predictors');
   return out;
 }
 

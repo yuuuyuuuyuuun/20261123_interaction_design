@@ -1,80 +1,108 @@
 'use strict';
 
 // Bot players. Shared by the game server and the simulations so that what we
-// measure is exactly what plays in class. Bots react with a human-like delay.
+// measure is exactly what plays in class. Bots react with a human-like delay and
+// judge the board with the win-probability model in ./odds.js.
+
+const { winProbs } = require('./odds');
 
 const BOT_TYPES = {
-  follow: { label: '追従予言', short: '追従', desc: 'すぐ多数派を予言し、多数派が入れ替わると乗り換える' },
-  wait: { label: '様子見予言', short: '様子見', desc: 'しばらく様子を見てから多数派を予言し、以後は乗り換える' },
-  inventEarly: { label: '早期発明', short: '早発', desc: '開始直後に多数派を発明する' },
-  inventLate: { label: '機を見て発明', short: '機発', desc: '予言で様子を見て、途中で多数派を発明する' },
-  contrarian: { label: '逆張り発明', short: '逆張', desc: '開始直後に最も少ない色を発明する' },
+  predict: {
+    label: '期待値予言',
+    short: '予言',
+    desc: '勝率×得点で判断。乗り換えると得点が減るので、少し不利になっても粘ることがある',
+  },
+  inventEarly: { label: '早期発明', short: '早発', desc: '開始直後に、勝ちそうな色を発明する' },
+  inventLate: { label: '機を見て発明', short: '機発', desc: '予言で様子を見て、途中で勝ちそうな色を発明する' },
+  contrarian: { label: '逆張り発明', short: '逆張', desc: '開始直後に、最も少ない色を発明する' },
+};
+// not offered on the host screen; kept for comparison in the simulations
+const HIDDEN_TYPES = {
+  follow: { label: '追従予言', short: '追従', desc: '多数派を予言し、多数派が入れ替わるたびに乗り換える' },
 };
 
+const SWITCH_MARGIN = 1.1; // switch only when clearly better: estimates are noisy
+
+function argmax(a) {
+  let b = 0;
+  for (let i = 1; i < a.length; i++) if (a[i] > a[b]) b = i;
+  return b;
+}
+
 function leaderOf(counts) {
-  let best = -1;
-  let bestN = -1;
-  let tie = false;
-  counts.forEach((v, k) => {
-    if (v > bestN) {
-      best = k;
-      bestN = v;
-      tie = false;
-    } else if (v === bestN) tie = true;
-  });
-  return tie ? -1 : best;
+  const max = Math.max(...counts);
+  return counts.filter((v) => v === max).length > 1 ? -1 : counts.indexOf(max);
 }
 
 /**
- * @param {keyof BOT_TYPES} type
+ * @param {string} type one of BOT_TYPES / HIDDEN_TYPES
  * @param {() => number} rng
- * @param {number} ticks ticks per round
+ * @param {number} ticks updates per round
  */
 function createBot(type, rng, ticks) {
-  const reaction = 1 + Math.floor(rng() * 3); // 1..3 updates to react
-  const patience = 2 + Math.floor(rng() * 3); // the new leader must hold this long before switching
-  const midpoint = Math.floor(ticks * (0.15 + rng() * 0.35));
-  let seen = -1; // leader currently being watched
+  const reaction = 1 + Math.floor(rng() * 3); // 1..3 updates before the first move
+  const patience = 1 + Math.floor(rng() * 2); // a reason to switch must last this long
+  const midpoint = Math.floor(ticks * (0.2 + rng() * 0.4));
+  let urge = 0; // consecutive updates a switch looked worth it
+
+  /** 期待値予言: compare "stay" (my points stay as they are) with "switch" (points restart now) */
+  function predictByValue(view, decl, api) {
+    const p = winProbs(view);
+    if (!decl) return api.predict(argmax(p));
+    const stay = p[decl.color] * (ticks - decl.tick);
+    let alt = -1;
+    let altValue = 0;
+    p.forEach((pc, c) => {
+      if (c !== decl.color && pc * view.remaining > altValue) {
+        alt = c;
+        altValue = pc * view.remaining;
+      }
+    });
+    urge = alt >= 0 && altValue > stay * SWITCH_MARGIN ? urge + 1 : 0;
+    if (urge >= patience) {
+      urge = 0;
+      api.predict(alt);
+    }
+  }
+
+  // the old naive predictor: switch every time the leader changes (for comparison)
+  let seen = -1;
   let seenSince = 0;
+  function follow(view, decl, api) {
+    const leader = leaderOf(view.counts);
+    if (leader !== seen) {
+      seen = leader;
+      seenSince = view.tick;
+    }
+    if (leader < 0) return;
+    if (!decl || (decl.color !== leader && view.tick - seenSince >= patience + 1)) api.predict(leader);
+  }
 
   return {
     type,
-    /** called once per update, before the world steps. api: { predict(c), invent(c) } */
+    /**
+     * called once per update, before the world steps.
+     * view: observe(world) from ./odds.js; me: { decl }; api: { predict(c), invent(c) }
+     */
     act(view, me, api) {
       const t = view.tick;
-      const counts = view.counts;
-      const leader = leaderOf(counts);
-      if (leader !== seen) {
-        seen = leader;
-        seenSince = t;
-      }
-      const stable = leader >= 0 && t - seenSince >= patience;
       const decl = me.decl;
-      if (decl?.invented) return;
-
-      const followFrom = (start) => {
-        if (t < start || leader < 0) return;
-        if (!decl) api.predict(leader);
-        else if (decl.color !== leader && stable) api.predict(leader);
-      };
-
+      if (decl?.invented || t < reaction) return;
       switch (type) {
+        case 'predict':
+          return predictByValue(view, decl, api);
         case 'follow':
-          return followFrom(reaction);
-        case 'wait':
-          return followFrom(midpoint);
+          return follow(view, decl, api);
         case 'inventEarly':
-          if (t >= reaction && leader >= 0) api.invent(leader);
-          return;
+          return api.invent(argmax(winProbs(view)));
         case 'inventLate':
-          if (t >= midpoint && leader >= 0) return api.invent(leader);
-          return followFrom(reaction);
+          if (t >= midpoint) return api.invent(argmax(winProbs(view)));
+          return predictByValue(view, decl, api);
         case 'contrarian':
-          if (t >= reaction) api.invent(counts.indexOf(Math.min(...counts)));
-          return;
+          return api.invent(view.counts.indexOf(Math.min(...view.counts)));
       }
     },
   };
 }
 
-module.exports = { BOT_TYPES, createBot, leaderOf };
+module.exports = { BOT_TYPES, HIDDEN_TYPES, createBot };

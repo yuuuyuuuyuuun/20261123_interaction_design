@@ -31,8 +31,6 @@ class WorldView {
     this.t0 = 0;
     this.dur = 350;
     this.highlight = null; // cell index
-    this.ripples = [];
-    this.lastTick = -1;
     const loop = () => {
       this.draw();
       requestAnimationFrame(loop);
@@ -64,7 +62,6 @@ class WorldView {
     if (!world) {
       this.world = null;
       this.to = null;
-      this.lastTick = -1;
       return;
     }
     const now = performance.now();
@@ -73,12 +70,9 @@ class WorldView {
     this.from = sameShape ? this.current(now) : target;
     this.to = target;
     this.t0 = now;
-    if (world.tick !== this.lastTick) {
-      for (const ev of world.events || []) this.ripples.push({ ...ev, t0: now });
-      this.lastTick = world.tick;
-    }
     this.world = world;
     this.fixedSet = new Set(world.fixedCells);
+    this.heldSet = new Set(world.heldCells || []);
     this.nameAt = new Map();
     (world.playerCell || []).forEach((cell, i) => this.nameAt.set(cell, world.names?.[i] ?? ''));
   }
@@ -119,6 +113,19 @@ class WorldView {
       ctx.fill();
     }
 
+    // cells swept up by a movement: a thin frame while they hold the color
+    if (this.heldSet.size) {
+      ctx.strokeStyle = 'rgba(255,255,255,.45)';
+      ctx.lineWidth = Math.max(1, size * 0.07);
+      for (const i of this.heldSet) {
+        if (this.fixedSet.has(i)) continue;
+        const x = ox + (i % cols) * step;
+        const y = oy + Math.floor(i / cols) * step;
+        roundRect(ctx, x + size * 0.18, y + size * 0.18, size * 0.64, size * 0.64, rad * 0.6);
+        ctx.stroke();
+      }
+    }
+
     // players: a dark dot (or their name); inventors: a glowing white frame
     const fontPx = size * 0.3;
     const showNames = this.opts.names && fontPx >= 10 * this.dpr;
@@ -150,19 +157,29 @@ class WorldView {
       }
     }
 
-    // movements: an expanding ring
-    this.ripples = this.ripples.filter((rp) => now - rp.t0 < 1400);
-    for (const rp of this.ripples) {
-      const k = (now - rp.t0) / 1400;
-      const cx = ox + rp.x * step + size / 2;
-      const cy = oy + rp.y * step + size / 2;
-      ctx.strokeStyle = COLORS[rp.color].hex;
-      ctx.globalAlpha = 1 - k;
-      ctx.lineWidth = Math.max(3, size * 0.35) * (1 - k * 0.6);
+    // movements: the growing front, and a faint circle showing how far it will grow
+    for (const wv of world.waves || []) {
+      const cx = ox + wv.x * step + size / 2;
+      const cy = oy + wv.y * step + size / 2;
+      const hex = COLORS[wv.color].hex;
+      ctx.save();
+      ctx.strokeStyle = hex;
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = Math.max(1.5, size * 0.08);
+      ctx.setLineDash([size * 0.3, size * 0.25]);
+      ctx.lineDashOffset = -now / 60;
       ctx.beginPath();
-      ctx.arc(cx, cy, rp.radius * step * (0.4 + k * 0.9), 0, Math.PI * 2);
+      ctx.arc(cx, cy, wv.maxRadius * step, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 0.95;
+      ctx.lineWidth = Math.max(3, size * 0.28);
+      ctx.shadowColor = hex;
+      ctx.shadowBlur = size * 0.8;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(0.5, wv.radius) * step + size * 0.1 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
 
     // me: a big moving ring that is easy to find on a crowded board
