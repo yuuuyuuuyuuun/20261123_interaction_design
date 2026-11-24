@@ -24,6 +24,11 @@ const BOT_TYPES = {
   inventLate: { label: '機を見て発明', short: '機発', desc: '何も宣言せずに様子を見て、途中で勝ちそうな色を発明する' },
   bandwagon: { label: '勝ち馬発明', short: '勝馬', desc: '何も宣言せずに様子を見て、勝率が60%を超えた色を発明する' },
   contrarian: { label: '逆張り発明', short: '逆張', desc: '開始直後に、最も少ない色を発明する' },
+  underdog: {
+    label: '穴狙い発明',
+    short: '穴狙',
+    desc: 'まだ誰も発明していなければ、少し負けている2番手の色（勝率30%以上）を発明してカリスマでの逆転を狙う。そうでなければ予言/発明と同じ',
+  },
 };
 const HIDDEN_TYPES = {};
 
@@ -139,6 +144,24 @@ function createBot(type, rng, ticks, opts = {}) {
           };
           if (!decl) return declare(choose(p, me.local, me.color));
           return predictByValue(view, decl, api, p, me, declare);
+        }
+        // underdog: while nobody has invented yet, invent the most promising color that is
+        // behind — only inventors of trailing colors can become a charisma, and if it comes back
+        // few people will have called it. Measured with UNDERDOG=1 node sim/invent-value.js:
+        // with no inventors on the board this gains rank over predicting the favorite.
+        case 'underdog': {
+          if (!decl) {
+            const inventors = view.fixed.reduce((a, b) => a + b, 0);
+            if (inventors <= (opts.maxInventors ?? 0)) {
+              const p = winProbs(view);
+              const max = Math.max(...view.counts);
+              const behind = [...p.keys()].filter((c) => view.counts[c] < max);
+              const c = behind.length ? behind.reduce((b, k) => (p[k] > p[b] ? k : b), behind[0]) : -1;
+              if (c >= 0 && p[c] >= (opts.minChance ?? 0.3)) return api.invent(c);
+            }
+          }
+          type = 'mixed';
+          return this.act(view, me, api);
         }
         case 'inventAt': // simulations: wait `opts.wait` updates, declaring nothing, then invent
           if (t >= (opts.wait ?? 0)) api.invent(choose(winProbs(view), me.local, me.color));

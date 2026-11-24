@@ -12,6 +12,9 @@ const OPTS = { ...DEFAULTS, ...JSON.parse(process.env.OPTS || '{}') };
 const NAMES = Object.keys(BOT_TYPES);
 const N = 30;
 const FOCAL = 0; // the player whose choice we test (an 期待値予言 bot)
+// UNDERDOG=1: at the first declaration, compare "invent the most promising trailing color"
+// with "predict the best color" (what 期待値予言 does)
+const UNDERDOG = Boolean(process.env.UNDERDOG);
 
 function bots(types, seed, ticks) {
   const rng = makeRng(seed);
@@ -54,7 +57,7 @@ function finish(w, types, seed, focalPredicts) {
 
 const rows = [];
 for (let r = 0; r < R; r++) {
-  for (const want of ['first', 'switch']) {
+  for (const want of UNDERDOG ? ['first'] : ['first', 'switch']) {
     const types = Array.from({ length: N }, (_, i) => (i === FOCAL ? 'predict' : NAMES[(i + r) % NAMES.length]));
     const w = new World(N, OPTS, 1000 + r);
     const brains = bots(types, 2000 + r, w.opts.ticks);
@@ -78,8 +81,14 @@ for (let r = 0; r < R; r++) {
         const local = localCounts(w, cell);
         local[w.color[cell]]--;
         const max = Math.max(...view.counts);
+        if (UNDERDOG) {
+          const behind = [...p.keys()].filter((c) => view.counts[c] < max);
+          decision.inventColor = behind.length ? behind.reduce((b, c) => (p[c] > p[b] ? c : b), behind[0]) : decision.color;
+        }
         decision.features = {
           tick: w.tick,
+          totalInventors: view.fixed.reduce((a, b) => a + b, 0),
+          pInvent: p[decision.inventColor ?? decision.color],
           p: p[decision.color],
           allies: local[decision.color],
           trailing: view.counts[decision.color] < max,
@@ -92,7 +101,7 @@ for (let r = 0; r < R; r++) {
     if (!decision) continue;
     const seed = 5000 + r * 2 + (want === 'switch' ? 1 : 0);
     const a = w.clone(seed);
-    a.invent(FOCAL, decision.color);
+    a.invent(FOCAL, decision.inventColor ?? decision.color);
     const b = w.clone(seed);
     b.predict(FOCAL, decision.color);
     const inv = finish(a, types, seed, false);
@@ -108,7 +117,18 @@ const show = (label, sel) => {
   const dr = sel2.map((x) => x.drank);
   console.log(`${label.padEnd(30)} n=${String(d.length).padStart(4)}  得点: 発明−予言 ${mean(d).toFixed(2).padStart(6)}点   順位: 発明で ${mean(dr).toFixed(2).padStart(6)} 位上がる`);
 };
-console.log(`1ラウンド ${OPTS.ticks} ターン、${rows.length} 回の分岐`);
+console.log(`1ラウンド ${OPTS.ticks} ターン、${rows.length} 回の分岐${UNDERDOG ? '（発明する側は2番手の色、予言する側は最有力の色）' : ''}`);
+if (UNDERDOG) {
+  show('すべて', () => true);
+  show('その時点の発明者 0人', (x) => x.totalInventors === 0);
+  show('その時点の発明者 1〜2人', (x) => x.totalInventors >= 1 && x.totalInventors <= 2);
+  show('その時点の発明者 3〜5人', (x) => x.totalInventors >= 3 && x.totalInventors <= 5);
+  show('その時点の発明者 6人以上', (x) => x.totalInventors >= 6);
+  show('2番手の勝率 0.3未満', (x) => x.pInvent < 0.3);
+  show('2番手の勝率 0.3〜0.4', (x) => x.pInvent >= 0.3 && x.pInvent < 0.4);
+  show('2番手の勝率 0.4以上', (x) => x.pInvent >= 0.4);
+  process.exit(0);
+}
 show('すべて', () => true);
 show('(a) 最初の宣言', (x) => x.kind === 'first');
 show('(b) 乗り換え', (x) => x.kind === 'switch');

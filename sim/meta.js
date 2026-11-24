@@ -16,6 +16,7 @@ const KINDS = {
     { key: '混成 得な場面だけ発明×1.2', type: 'mixed', opts: { margin: 1.2 } },
     { key: '混成 最初は勝率40%以上で発明', type: 'mixed', opts: { margin: 1.0, firstAt: 0.4 } },
     { key: '混成 最初は勝率60%以上で発明', type: 'mixed', opts: { margin: 1.0, firstAt: 0.6 } },
+    { key: '穴狙い（発明者0人なら2番手を発明）', type: 'underdog', opts: { margin: 1.0 } },
   ],
 };
 
