@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d14">
+<title>世界は、わたしたちでできている</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { min-height: 100dvh; user-select: none; -webkit-user-select: none; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 14px 16px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; min-height: 100dvh; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  header .name { font-weight: 700; }
+  .screen { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  h2 { font-size: 26px; margin: 8px 0 0; line-height: 1.3; }
+  p { margin: 0; line-height: 1.7; }
+  input[type=text] { width: 100%; font: inherit; font-size: 20px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  ol.rules { margin: 0; padding-left: 1.2em; line-height: 1.8; }
+
+  .status { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; }
+  .status .lbl { font-size: 12px; color: var(--muted); letter-spacing: .08em; }
+  .status .num { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+  .status .value { text-align: right; }
+  #world { width: 100%; height: min(calc(100vw - 32px), 40dvh); display: block; }
+  .me { text-align: center; font-size: 15px; min-height: 1.6em; }
+
+  .choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .choice { padding: 18px 0; border-radius: 14px; font-size: 22px; font-weight: 800; color: #0b0d14; position: relative; transition: transform .1s, box-shadow .2s; }
+  .choice:active { transform: scale(.97); }
+  .choice.on { box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px #fff; }
+  .choice small { display: block; font-size: 12px; font-weight: 700; opacity: .75; }
+
+  .invent { width: 100%; position: relative; overflow: hidden; padding: 20px; border-radius: 16px; font-size: 18px; font-weight: 800; background: transparent; border: 2px solid #fff; touch-action: none; }
+  .invent .prog { position: absolute; inset: 0; background: #fff; transform-origin: left; transform: scaleX(0); }
+  .invent span { position: relative; mix-blend-mode: difference; }
+  .hint { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.6; text-wrap: balance; }
+  .fixed { border-radius: 16px; padding: 18px; text-align: center; font-weight: 700; line-height: 1.6; border: 2px solid #fff; box-shadow: 0 0 24px rgba(255,255,255,.25); }
+
+  .result-big { font-size: 46px; font-weight: 900; text-align: center; margin-top: 12px; }
+  .points { font-size: 64px; font-weight: 900; text-align: center; font-variant-numeric: tabular-nums; }
+  .center { text-align: center; }
+  .err { color: var(--red); font-size: 14px; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="muted">世界は、わたしたちでできている</span>
+    <span class="name" id="myName"></span>
+  </header>
+
+  <!-- join -->
+  <section class="screen hidden" id="join">
+    <h2>あなたも、世界の1マスになる。</h2>
+    <p class="muted">名前を入れて参加してください（12文字まで）。</p>
+    <input type="text" id="nameInput" maxlength="12" autocomplete="nickname" placeholder="なまえ">
+    <div class="err" id="joinErr"></div>
+    <button class="btn" id="joinBtn">参加する</button>
+  </section>
+
+  <!-- waiting / rules -->
+  <section class="screen hidden" id="wait">
+    <h2 id="waitTitle">参加しました</h2>
+    <p class="muted" id="waitText">大画面でゲームが始まるのを待っています。</p>
+    <div class="card">
+      <ol class="rules">
+        <li>あなたは世界の<b>1マス</b>。マスは時々、<b>隣の誰かの色を真似</b>ます。</li>
+        <li>終了時に<b>最も多い色</b>が「未来」。早く言い当てるほど高得点。</li>
+        <li><b>予言</b>：色をタップ。何度でも変えられる。あなたは流され続ける。</li>
+        <li><b>発明</b>：長押し。取り消せない。あなたはその色で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- playing -->
+  <section class="screen hidden" id="play">
+    <div class="status">
+      <div>
+        <div class="lbl" id="phaseLbl">未来まで</div>
+        <div class="num" id="remain">60</div>
+      </div>
+      <div class="value">
+        <div class="lbl">今言い当てれば</div>
+        <div class="num" id="worth">+60</div>
+      </div>
+    </div>
+    <canvas id="world"></canvas>
+    <div class="me" id="meLine"></div>
+
+    <div id="controls">
+      <div class="choices" id="choices"></div>
+      <div style="height:12px"></div>
+      <button class="invent" id="inventBtn"><div class="prog" id="prog"></div><span id="inventLbl">長押しで発明する</span></button>
+      <div class="hint" id="hint">まず色をタップして予言してください。</div>
+    </div>
+    <div class="fixed hidden" id="fixedBox"></div>
+    <div class="hint hidden" id="spectate">このラウンドの途中から参加しました。次のラウンドから世界に入ります。</div>
+  </section>
+
+  <!-- result -->
+  <section class="screen hidden" id="result">
+    <div class="center muted" id="rYear"></div>
+    <div class="result-big" id="rFuture"></div>
+    <div class="center" id="rMine"></div>
+    <div class="points" id="rPoints"></div>
+    <div class="card center">
+      合計 <b id="rTotal">0</b> 点 ・ <b id="rRank">-</b> 位
+    </div>
+    <p class="center muted" id="rNext">次のラウンドを待っています。</p>
+  </section>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/common.js"></script>
+<script src="/player.js"></script>
+</body>
+</html>

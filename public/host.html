@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>世界は、わたしたちでできている — 大画面</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { overflow: hidden; }
+  .app { display: grid; grid-template-columns: 1fr 380px; height: 100vh; }
+  main { position: relative; padding: 28px; display: flex; flex-direction: column; min-width: 0; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 28px 26px; display: flex; flex-direction: column; gap: 22px; overflow-y: auto; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: .04em; }
+  .stage { flex: 1; position: relative; min-height: 0; }
+  #world { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 18px; }
+  .overlay.dim { background: rgba(11,13,20,.82); backdrop-filter: blur(6px); }
+
+  /* lobby */
+  .lobby { display: grid; grid-template-columns: auto 1fr; gap: 48px; align-items: center; max-width: 1100px; text-align: left; }
+  .qr { background: #fff; padding: 14px; border-radius: 18px; width: min(34vh, 360px); aspect-ratio: 1; }
+  .qr img { width: 100%; height: 100%; display: block; }
+  .title { font-size: clamp(32px, 4.4vw, 64px); font-weight: 800; line-height: 1.15; margin: 0 0 18px; letter-spacing: .02em; }
+  .rules { font-size: 19px; line-height: 1.75; margin: 0; padding-left: 1.2em; }
+  .rules b { color: #fff; }
+  .url { font-size: 20px; margin-top: 14px; word-break: break-all; }
+
+  /* side */
+  .label { font-size: 13px; letter-spacing: .12em; color: var(--muted); margin-bottom: 6px; }
+  .big { font-size: 64px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .year { font-size: 28px; font-weight: 700; }
+  .bars { display: flex; flex-direction: column; gap: 10px; }
+  .bar { display: grid; grid-template-columns: 28px 1fr 44px; align-items: center; gap: 10px; font-weight: 700; }
+  .track { height: 16px; background: #0d1018; border-radius: 99px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 99px; transition: width .45s ease; }
+  .count { text-align: right; font-variant-numeric: tabular-nums; }
+  .legend { font-size: 14px; line-height: 1.7; color: var(--muted); }
+  .legend .sw { display: inline-block; width: 16px; height: 16px; border-radius: 4px; vertical-align: -3px; margin-right: 6px; }
+  .legend .inv { box-shadow: 0 0 10px #fff; outline: 2px solid #fff; outline-offset: -5px; background: var(--red); }
+  .controls { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+  .settings { display: flex; gap: 10px; font-size: 14px; color: var(--muted); align-items: center; flex-wrap: wrap; }
+  .settings input { width: 64px; padding: 6px 8px; border-radius: 8px; background: #0d1018; color: var(--text); border: 1px solid var(--line); font: inherit; }
+  .players { display: flex; flex-wrap: wrap; gap: 6px; font-size: 14px; }
+  .players .off { opacity: .4; }
+
+  /* result */
+  .future { font-size: clamp(48px, 8vw, 120px); font-weight: 900; letter-spacing: .04em; }
+  .sub { font-size: 24px; }
+  #hist { width: min(720px, 80%); height: 150px; }
+  .rank { font-size: 18px; display: grid; grid-template-columns: 2em 1fr auto; gap: 6px 14px; }
+  .rank .pts { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .timeline { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .era { width: 150px; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+  .era .y { font-weight: 800; font-size: 20px; }
+  .era .c { height: 54px; border-radius: 10px; margin: 10px 0; display: grid; place-items: center; font-weight: 900; font-size: 22px; color: #0b0d14; }
+  .era .k { font-size: 13px; color: var(--muted); }
+  .era.invented { border-color: #fff; box-shadow: 0 0 18px rgba(255,255,255,.25); }
+  .closing { font-size: clamp(22px, 2.4vw, 34px); max-width: 1000px; line-height: 1.6; text-wrap: balance; }
+  .denied { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); font-size: 22px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <main>
+    <h1>世界は、わたしたちでできている</h1>
+    <div class="stage">
+      <canvas id="world"></canvas>
+
+      <div id="lobby" class="overlay">
+        <div class="lobby">
+          <div class="qr"><img id="qr" alt="参加用QRコード"></div>
+          <div>
+            <p class="title">予言するか。<br>発明するか。</p>
+            <ol class="rules">
+              <li>あなたは世界の<b>1マス</b>です。マスは時々、<b>隣の誰かの色を真似</b>ます。</li>
+              <li>終了時に<b>最も多い色</b>が「未来」です。それを<b>早く言い当てるほど高得点</b>。</li>
+              <li><b>予言</b>はいつでも変えられる。あなたは流され続ける。</li>
+              <li><b>発明</b>は取り消せない。あなたはその色で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
+            </ol>
+            <div class="url muted" id="url"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="observe" class="overlay hidden">
+        <div class="future" id="observeCount">5</div>
+        <div class="sub">世界を観察してください</div>
+      </div>
+
+      <div id="result" class="overlay dim hidden">
+        <div class="sub muted" id="resultYear"></div>
+        <div class="future" id="resultFuture"></div>
+        <canvas id="hist"></canvas>
+        <div class="sub" id="resultInv"></div>
+      </div>
+
+      <div id="final" class="overlay dim hidden">
+        <div class="timeline" id="timeline"></div>
+        <p class="closing" id="closing"></p>
+        <p class="quote"><b>“The best way to predict the future is to invent it.”</b><br>— Alan Kay</p>
+      </div>
+    </div>
+  </main>
+
+  <aside>
+    <div id="sideGame">
+      <div class="label">ラウンド</div>
+      <div class="year" id="roundLabel">—</div>
+    </div>
+    <div>
+      <div class="label">未来まで</div>
+      <div class="big" id="remaining">—</div>
+    </div>
+    <div>
+      <div class="label">いまの世界</div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div>
+      <div class="label">立ち止まった発明者</div>
+      <div class="big" id="inventors" style="font-size:44px">0</div>
+    </div>
+    <div class="legend">
+      <div><span class="sw" style="background:var(--blue)"></span>流されているマス（予言者・未宣言）</div>
+      <div><span class="sw inv"></span>発明者のマス（もう色が変わらない）</div>
+    </div>
+
+    <div id="rankingBox" class="hidden">
+      <div class="label">ランキング</div>
+      <div class="rank" id="ranking"></div>
+    </div>
+
+    <div id="playersBox">
+      <div class="label">参加者 <span id="pcount">0</span>人</div>
+      <div class="players" id="players"></div>
+    </div>
+
+    <div class="controls">
+      <div class="settings" id="settings">
+        ラウンド数 <input id="setRounds" type="number" min="1" max="20" value="5">
+        秒数 <input id="setTicks" type="number" min="10" max="300" value="60">
+      </div>
+      <button class="btn" id="startBtn">ラウンド開始</button>
+      <button class="btn ghost" id="resetBtn">最初からやり直す</button>
+    </div>
+  </aside>
+</div>
+<div class="denied hidden" id="denied">大画面用のURL（key付き）で開いてください。</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/common.js"></script>
+<script src="/host.js"></script>
+</body>
+</html>
