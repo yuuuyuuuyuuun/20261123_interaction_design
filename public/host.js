@@ -103,7 +103,7 @@ function render() {
     lastEventTick = s.world.tick;
     const ev = s.world.events[s.world.events.length - 1];
     const c = COLORS[ev.color];
-    toast(ev.kind === 'charisma' ? `${c.name}のカリスマ、${s.world.names[ev.player]}` : `${c.name}のムーブメント！`, c.hex);
+    toast(ev.kind === 'charisma' ? `${c.name}のカリスマ、${s.world.names[ev.player]}が現れた` : `${c.name}のムーブメント！`, c.hex);
   }
 
   $('roundLabel').textContent = s.round ? `${yearOf(s.round)}年代（${s.round}/${s.rounds}）` : `全${s.rounds}ラウンド`;
@@ -151,7 +151,7 @@ function render() {
 }
 
 function futureLabel(f) {
-  return f < 0 ? '未来は定まらなかった' : `未来は「${COLORS[f].name}」`;
+  return f < 0 ? '未来は定まらなかった' : `「${COLORS[f].name}」の未来`;
 }
 
 function renderResult(r) {
@@ -162,7 +162,7 @@ function renderResult(r) {
   $('resultInv').textContent =
     r.inventors === 0
       ? '誰も発明しなかった。世界はなりゆきで決まった。'
-      : `${r.inventors}人が発明をはじめ、そのうち${r.inventorsOfFuture}人がこの未来を創造した。`;
+      : `${r.inventors}人が発明を選び、そのうち${r.inventorsOfFuture}人がこの未来を創造した。`;
   requestAnimationFrame(() => drawHistory($('hist'), r.history));
 }
 
