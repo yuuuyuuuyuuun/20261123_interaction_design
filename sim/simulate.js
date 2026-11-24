@@ -1,6 +1,6 @@
 'use strict';
 // 既定のパラメータでのバランス報告。 usage: node sim/simulate.js [rounds]
-const { evaluate, playRound } = require('./lib');
+const { evaluate, playRound, marks } = require('./lib');
 const { nucleation, fmt } = require('./nucleation');
 const { texture } = require('./texture');
 const { favoriteHolds } = require('./favorite');
@@ -25,18 +25,20 @@ const t = texture(DEFAULTS, 60);
 console.log(`\n■ 盤面（誰も発明しない世界、30人）: 1ターンに変化 ${p(t.activity)} / 周り8マスが同じ色のマス ${p(t.interior)} / 一色の世界が60ターンで侵食される割合 ${p(t.invaded)}`);
 
 console.log('\n■ 人数ごと（誰も発明しない世界での逆転率。ムーブメント・カリスマあり）');
-console.log('人数  盤面   | 交代 | 「tターン時点の多数派」が負ける率 t3 t30 t50 t55 | 全員一斉発明の成功率');
+const M = marks(DEFAULTS.ticks);
+console.log(`1ラウンド ${DEFAULTS.ticks} ターン`);
+console.log(`人数  盤面   | 交代 | 「tターン時点の多数派」が負ける率 t${M.early} t${M.half} t${M.q83} t${M.q92} | 全員一斉発明の成功率`);
 for (const N of [10, 20, 30, 40]) {
   const e = evaluate(DEFAULTS, { N, R, seed: 11 });
   const w = new World(N, DEFAULTS, 1);
-  console.log(String(N).padStart(3), (w.cols + 'x' + w.rows).padStart(7), ' |', f(e.leaderChanges), '|', ''.padStart(27), p(1 - e.keep3), p(1 - e.keep30), p(1 - e.keep50), p(1 - e.keep55), ' |', p(e.herd).padStart(10));
+  console.log(String(N).padStart(3), (w.cols + 'x' + w.rows).padStart(7), ' |', f(e.leaderChanges), '|', ''.padStart(27), p(1 - e.keepEarly), p(1 - e.keepHalf), p(1 - e.keep83), p(1 - e.keep92), ' |', p(e.herd).padStart(10));
 }
 
 console.log(`\n■ 全種類のボットが均等にいるラウンドで、開始4ターン時点の多数派が勝つ率: ${p(favoriteHolds(DEFAULTS, R))}`);
 
 console.log('\n■ 終盤に新しく始まったムーブメント・カリスマが原因の逆転（30人、全種類のボット）');
 const types = Array.from({ length: 30 }, (_, i) => Object.keys(BOT_TYPES)[i % 8]);
-for (const cut of [50, 55]) {
+for (const cut of [M.q83, M.q92]) {
   let all = 0;
   let without = 0;
   for (let r = 0; r < R; r++) {

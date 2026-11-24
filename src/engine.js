@@ -22,7 +22,7 @@
 // Chosen by simulation (see sim/ and README).
 const DEFAULTS = {
   colors: 3,
-  ticks: 60, // updates per round
+  ticks: 40, // updates per round
   boardScale: 16, // board cells ≈ players × boardScale
   minCells: 96, // never smaller than this, so a small class still gets a lively world
   aspect: 4 / 3, // cols : rows

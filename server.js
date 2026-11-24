@@ -35,7 +35,7 @@ const game = {
   phase: 'lobby', // lobby | observe | playing | result | final
   round: 0,
   rounds: 5,
-  ticks: 60,
+  ticks: 40,
   bots: Object.fromEntries(Object.keys(BOT_TYPES).map((k) => [k, 0])),
   world: null,
   order: [], // player index in the world -> player id

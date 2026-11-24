@@ -48,6 +48,11 @@ function playRound(types, opts, seed, hooks = {}) {
   };
 }
 
+/** points of a round as shares of its length: 5%, 50%, 75%, 83% (= 50 of 60), 92% (= 55 of 60) */
+function marks(T) {
+  return { early: Math.max(1, Math.round(T * 0.05)), half: Math.round(T / 2), q75: Math.round(T * 0.75), q83: Math.round((T * 5) / 6), q92: Math.round((T * 11) / 12) };
+}
+
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
 
 /** Evaluates a parameter set. Returns plain numbers. */
@@ -56,17 +61,17 @@ function evaluate(opts, { N = 30, R = 300, seed = 1 } = {}) {
   const out = {};
   // A. no inventors at all
   {
-    const act = [], lc = [], m = [], hit = { 3: 0, 10: 0, 30: 0, 40: 0, 50: 0, 55: 0 }, ties = [], mv = [];
+    const act = [], lc = [], m = [], hit = { early: 0, half: 0, q75: 0, q83: 0, q92: 0 }, ties = [], mv = [];
     for (let r = 0; r < R; r++) {
       const g = playRound(new Array(N).fill('follow'), opts, seed * 1e6 + r);
       act.push(g.activity); lc.push(g.leaderChanges); m.push(g.margin);
       mv.push(g.movements);
-      for (const t of [3, 10, 30, 40, 50, 55]) if (g.leaders[t] === g.res.future) hit[t]++;
+      for (const [k, t] of Object.entries(marks(g.w.opts.ticks))) if (g.leaders[t] === g.res.future) hit[k]++;
       ties.push(g.res.future < 0 ? 1 : 0);
     }
     Object.assign(out, {
       activity: mean(act), leaderChanges: mean(lc), margin: mean(m), ties: mean(ties),
-      keep3: hit[3] / R, keep10: hit[10] / R, keep30: hit[30] / R, keep40: hit[40] / R, keep50: hit[50] / R, keep55: hit[55] / R, movements: mean(mv),
+      keepEarly: hit.early / R, keepHalf: hit.half / R, keep75: hit.q75 / R, keep83: hit.q83 / R, keep92: hit.q92 / R, movements: mean(mv),
     });
   }
   // B. a lone inventor of a random color at t=0, everyone else follows
@@ -109,4 +114,4 @@ function evaluate(opts, { N = 30, R = 300, seed = 1 } = {}) {
   return out;
 }
 
-module.exports = { playRound, evaluate, mean };
+module.exports = { playRound, evaluate, mean, marks };
