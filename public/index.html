@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d14">
-<title>世界は、わたしたちでできている</title>
+<title>未来を予測する最善の方法は、それを発明することだ</title>
 <link rel="stylesheet" href="/style.css">
 <style>
   body { min-height: 100dvh; user-select: none; -webkit-user-select: none; }
@@ -54,14 +54,14 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="muted">世界は、わたしたちでできている</span>
+    <span class="muted">未来を予測する最善の方法は、それを発明することだ</span>
     <span class="name" id="myName"></span>
   </header>
 
   <!-- join -->
   <section class="screen hidden" id="join">
-    <h2>あなたも、世界の土地のひとつになる。</h2>
-    <p class="muted">名前を入れて参加してください（12文字まで）。</p>
+    <h2>あなたは、世界を形づくる一人だ。</h2>
+    <p class="muted">名前を入れて参加してください。</p>
     <input type="text" id="nameInput" maxlength="12" autocomplete="nickname" placeholder="なまえ">
     <div class="err" id="joinErr"></div>
     <button class="btn" id="joinBtn">参加する</button>
@@ -70,15 +70,14 @@
   <!-- waiting / rules -->
   <section class="screen hidden" id="wait">
     <h2 id="waitTitle">参加しました</h2>
-    <p class="muted" id="waitText">大画面でゲームが始まるのを待っています。</p>
+    <p class="muted" id="waitText">ゲームが始まるのを待っています。</p>
     <div class="card">
       <ol class="rules">
-        <li>あなたは<b>市民</b>として、世界の<b>土地</b>のひとつに住んでいます。世界には市民のいない土地もあります。</li>
-        <li>土地には<b>都市・自然・荒野</b>の3種類があり、周りの土地の種類に染まります。<b>同じ種類が2〜3つ隣にあれば十分</b>なので、小さな塊でも根付きます。</li>
-        <li>負けている種類を発明した市民には、ときどき<b>カリスマ</b>が宿り、数ターン周りを強く染めます。</li>
-        <li>終了時に<b>最も多い種類</b>が「未来」。早く言い当てるほど高得点。</li>
+        <li>あなたは<b>市民</b>として、世界の<b>土地</b>のひとつに住んでいます。</li>
+        <li>土地は<b>都市・自然・荒野</b>の3種類があり、周りに影響を受けて変化します。</li>
+        <li>あなたは、終了時に最も多い土地を予測します。<b>早く言い当てるほど高得点</b>。</li>
         <li><b>予言</b>：何度でも変えられる。あなたの土地は流され続ける。</li>
-        <li><b>発明</b>：取り消せない。あなたの土地はその種類で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
+        <li><b>発明</b>：取り消せない。あなたは土地をその種類で<b>固定</b>し、その未来に向かい続ける。</li>
       </ol>
     </div>
   </section>
@@ -102,9 +101,9 @@
     <div class="me" id="meLine"></div>
 
     <div id="controls">
-      <div class="rowlbl">予言する <span class="muted">— 何度でも変えられる</span></div>
+      <div class="rowlbl">予言 <span class="muted">— 何度でも変えられる/あなたは、その未来を予測するspan></div>
       <div class="choices" id="predictRow"></div>
-      <div class="rowlbl">発明する <span class="muted">— 取り消せない。その種類で立ち止まる</span></div>
+      <div class="rowlbl">発明 <span class="muted">— 取り消せない/あなたは、その未来を創造する</span></div>
       <div class="choices" id="inventRow"></div>
     </div>
     <div class="fixed hidden" id="fixedBox"></div>
