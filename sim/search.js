@@ -25,7 +25,8 @@ function penalty(m) {
   p += Math.max(0, Math.max(...serious) - 1.8);
   p += serious.filter((x) => x < 0.3).length * 0.12;
   p += Math.max(0, 0.12 - m.t.interior) * 5 + Math.max(0, m.t.invaded - 0.15) * 3 + Math.max(0, 0.22 - m.t.activity) * 3;
-  p += Math.max(0, 0.5 - (m.n.all[3] + m.n.all[4]) / 2) * 2 + Math.max(0, m.n.free[4] - 0.08) * 3;
+  p += Math.max(0, 0.4 - (m.n.all[3] + m.n.all[4]) / 2) * 2 + Math.max(0, m.n.free[4] - 0.1) * 3;
+  p += Math.max(0, 0.1 - (m.n.kept.free[3] + m.n.kept.free[4]) / 2) * 2;
   return p;
 }
 
@@ -33,18 +34,15 @@ function sample(rng) {
   const pick = (a) => a[Math.floor(rng() * a.length)];
   const between = (a, b, d = 2) => Number((a + rng() * (b - a)).toFixed(d));
   return {
-    half: between(2.3, 2.9),
-    peak: pick([4, 5, 8]),
-    floor: between(0.75, 1),
-    inertia: between(0.2, 0.6),
-    noise: between(0.005, 0.02, 3),
-    imitate: between(0.6, 0.95),
-    charisma: between(0.1, 0.35),
-    charismaPull: Math.round(between(6, 20)),
+    hear: between(0.72, 0.78),
+    imitate: between(0.75, 0.95),
+    noise: between(0.004, 0.015, 3),
+    charisma: between(0.08, 0.3),
+    charismaReach: between(0.3, 0.9),
     charismaRadius: pick([2, 3]),
     charismaTurns: pick([[4, 6], [5, 8]]),
-    movement: between(0.02, 0.08, 3),
-    movementRadius: [0.1, between(0.15, 0.25)],
+    movement: between(0.02, 0.07, 3),
+    movementRadius: [0.1, between(0.14, 0.22)],
   };
 }
 

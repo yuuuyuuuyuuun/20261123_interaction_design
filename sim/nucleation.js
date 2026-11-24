@@ -12,7 +12,7 @@ const SHAPES = {
   6: [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [-1, 1]],
 };
 
-/** returns P(region of >= 20 red cells in the 9x9 window after `T` updates) */
+/** after `T` updates: { kept: red cells in the 9x9 window >= the cluster size, region: >= 20 } */
 function trial(opts, s, mode, seed, T = 20) {
   const w = new World(1, { ...opts, movement: 0, charisma: 0 }, seed);
   w.color.fill(1);
@@ -26,17 +26,24 @@ function trial(opts, s, mode, seed, T = 20) {
   for (let t = 0; t < T; t++) w.step();
   let red = 0;
   for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) if (w.color[(cy + dy) * w.cols + cx + dx] === 0) red++;
-  return red >= 20;
+  return { kept: red >= s, region: red >= 20 };
 }
 
 function nucleation(opts, R = 300) {
-  const out = {};
+  const out = { kept: {} };
   for (const mode of ['free', 'one', 'all']) {
     out[mode] = {};
+    out.kept[mode] = {};
     for (const s of [1, 2, 3, 4, 5, 6]) {
-      let ok = 0;
-      for (let r = 0; r < R; r++) if (trial(opts, s, mode, 1 + r)) ok++;
-      out[mode][s] = ok / R;
+      let region = 0;
+      let kept = 0;
+      for (let r = 0; r < R; r++) {
+        const t = trial(opts, s, mode, 1 + r);
+        if (t.region) region++;
+        if (t.kept) kept++;
+      }
+      out[mode][s] = region / R;
+      out.kept[mode][s] = kept / R;
     }
   }
   return out;
@@ -46,9 +53,10 @@ const fmt = (o) => [1, 2, 3, 4, 5, 6].map((s) => ((100 * o[s]).toFixed(0) + '%')
 
 if (require.main === module) {
   const n = nucleation(DEFAULTS);
-  console.log('塊の大きさ           1    2    3    4    5    6');
-  console.log('流されるマスだけ ', fmt(n.free));
-  console.log('中心1つが発明者  ', fmt(n.one));
-  console.log('全員が発明者     ', fmt(n.all));
+  console.log('                   残る率（その大きさ以上を保つ）    領域になる率（9x9中20マス以上）');
+  console.log('塊の大きさ           1    2    3    4    5    6 |    1    2    3    4    5    6');
+  console.log('流されるマスだけ ', fmt(n.kept.free), '|', fmt(n.free));
+  console.log('中心1つが発明者  ', fmt(n.kept.one), '|', fmt(n.one));
+  console.log('全員が発明者     ', fmt(n.kept.all), '|', fmt(n.all));
 }
 module.exports = { nucleation, fmt };

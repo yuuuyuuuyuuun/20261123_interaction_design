@@ -26,10 +26,24 @@ const DEFAULTS = {
   boardScale: 16, // board cells ≈ players × boardScale
   minCells: 96, // never smaller than this, so a small class still gets a lively world
   aspect: 4 / 3, // cols : rows
-  noise: 0.008,
-  imitate: 0.85,
+  noise: 0.006,
+  imitate: 0.81,
   // conformity law
-  law: 'saturate', // 'saturate' | 'sample'
+  law: 'voices', // 'voices' | 'ally' | 'saturate' | 'sample'
+  //   voices: each neighbor speaks up with probability `hear`. A color becomes a candidate
+  //           only when at least `need` people voice it; the cell takes the most voiced
+  //           candidate (`choose`: 'most' | 'share' = in proportion to the voices |
+  //           'even' = any candidate equally, however many voices it got). With
+  //           `selfVoice` the cell's own color always counts one voice. If nothing is
+  //           voiced often enough, the cell keeps its color.
+  hear: 0.77,
+  need: 2,
+  choose: 'even',
+  selfVoice: true,
+  //   ally: look at `sample` random neighbors. If even one of them shares your color, keep it
+  //         (one ally is enough to resist the pressure — Asch). Otherwise take the most
+  //         common color among them. Lone cells and pairs are swallowed; a group of 3–4
+  //         already gives most of its members an ally.
   //   saturate: a color pulls a cell by n^p / (n^p + half^p), n = neighbors of that color.
   //             2–3 neighbors are already persuasive; more add little, so a small group of
   //             3–4 can hold its ground and grow. (Optionally the pull can decline beyond
@@ -43,16 +57,17 @@ const DEFAULTS = {
   //   sample: look at `sample` random neighbors and take their most common color
   sample: 3,
   // ムーブメント
-  movement: 0.05, // probability per update (once ramped up)
+  movement: 0.066, // probability per update (once ramped up)
   movementRamp: [0.15, 0.4], // none before 15% of the round, full rate from 40%
   quietFrom: 0.85, // no new movements or charismas in the last 15% of a round: the end is decided by what everyone can already see
   movementRadius: [0.1, 0.18], // relative to the shorter side of the board
   movementTarget: 'trailing', // 'trailing': only colors that are behind | 'any'
   // カリスマ
   charisma: 0.22, // probability per update that an inventor of a trailing color gets it
-  charismaRadius: 3, // the people within this many cells (a square) are under its spell
-  charismaTurns: [4, 6],
-  charismaPull: 30, // extra pull toward its color for the people under its spell
+  charismaRadius: 2, // the people within this many cells (a square) are under its spell
+  charismaTurns: [5, 8],
+  charismaPull: 30, // extra pull toward its color for the people under its spell (saturate/sample laws)
+  charismaReach: 0.5, // voices/ally laws: chance per update that a person under the spell takes its color
   eventsStopAt: Infinity, // (simulation only) no new movements or charismas from this update on
 };
 
@@ -269,6 +284,63 @@ class World {
     const o = this.opts;
     const nb = this.neighbors[i];
     const cnt = this._cnt || (this._cnt = new Array(o.colors));
+    if (o.law === 'voices') {
+      if (this.spell[i] >= 0 && this.rng() < o.charismaReach) return this.spell[i];
+      const own = cur[i];
+      cnt.fill(0);
+      if (o.selfVoice) cnt[own]++;
+      for (let s = 0; s < 8; s++) if (this.rng() < o.hear) cnt[cur[nb[s]]]++;
+      let best = own;
+      let bestN = o.selfVoice ? Math.max(o.need, cnt[own]) : cnt[own] >= o.need ? cnt[own] : o.need - 1;
+      if (o.choose === 'even') {
+        let n = 0;
+        let pick = own;
+        for (let c = 0; c < cnt.length; c++) if (cnt[c] >= o.need && this.rng() < 1 / ++n) pick = c;
+        return pick;
+      }
+      if (o.choose === 'share') {
+        let total = 0;
+        for (let c = 0; c < cnt.length; c++) if (cnt[c] >= o.need) total += cnt[c];
+        if (total === 0) return own;
+        let r = this.rng() * total;
+        for (let c = 0; c < cnt.length; c++) if (cnt[c] >= o.need && (r -= cnt[c]) < 0) return c;
+        return own;
+      }
+      let ties = 1;
+      for (let c = 0; c < cnt.length; c++) {
+        if (c === own || cnt[c] < o.need) continue;
+        if (cnt[c] > bestN) {
+          best = c;
+          bestN = cnt[c];
+          ties = 1;
+        } else if (cnt[c] === bestN && best !== own && this.rng() < 1 / ++ties) best = c;
+      }
+      return best;
+    }
+    if (o.law === 'ally') {
+      if (this.spell[i] >= 0 && this.rng() < o.charismaReach) return this.spell[i];
+      const pick = this._pick || (this._pick = [0, 1, 2, 3, 4, 5, 6, 7]);
+      const own = cur[i];
+      cnt.fill(0);
+      for (let s = 0; s < o.sample; s++) {
+        const j = s + Math.floor(this.rng() * (8 - s));
+        [pick[s], pick[j]] = [pick[j], pick[s]];
+        const c = cur[nb[pick[s]]];
+        if (c === own) return own; // an ally
+        cnt[c]++;
+      }
+      let best = 0;
+      let ties = 0;
+      let choice = own;
+      for (let c = 0; c < cnt.length; c++) {
+        if (cnt[c] > best) {
+          best = cnt[c];
+          choice = c;
+          ties = 1;
+        } else if (cnt[c] === best && best > 0 && this.rng() < 1 / ++ties) choice = c;
+      }
+      return choice;
+    }
     if (o.law === 'sample') {
       const pick = this._pick || (this._pick = [0, 1, 2, 3, 4, 5, 6, 7]);
       cnt.fill(0);

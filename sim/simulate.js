@@ -13,12 +13,13 @@ const f = (x) => x.toFixed(1).padStart(5);
 
 console.log('既定値:', JSON.stringify(DEFAULTS), '\n');
 
-console.log('■ 塊の定着率（敵の色一色の中に赤の塊を置き、20ターン後に赤の領域ができた割合）');
+console.log('■ 塊の行方（敵の色一色の中に赤の塊を置いて20ターン後）');
 const n = nucleation(DEFAULTS, R);
-console.log('  塊の大きさ           1    2    3    4    5    6');
-console.log('  流されるマスだけ ', fmt(n.free));
-console.log('  中心1つが発明者  ', fmt(n.one));
-console.log('  全員が発明者     ', fmt(n.all));
+console.log('                     残る率（その大きさ以上を保つ）  | 領域になる率（9x9中20マス以上）');
+console.log('  塊の大きさ           1    2    3    4    5    6 |    1    2    3    4    5    6');
+console.log('  流されるマスだけ ', fmt(n.kept.free), '|', fmt(n.free));
+console.log('  中心1つが発明者  ', fmt(n.kept.one), '|', fmt(n.one));
+console.log('  全員が発明者     ', fmt(n.kept.all), '|', fmt(n.all));
 
 const t = texture(DEFAULTS, 60);
 console.log(`\n■ 盤面（誰も発明しない世界、30人）: 1ターンに変化 ${p(t.activity)} / 周り8マスが同じ色のマス ${p(t.interior)} / 一色の世界が60ターンで侵食される割合 ${p(t.invaded)}`);
