@@ -9,7 +9,8 @@
 
 let MODEL = null;
 try {
-  MODEL = require('./odds-model.json');
+  // ODDS_MODEL: (simulation only) use another fitted model file
+  MODEL = require(process.env.ODDS_MODEL || './odds-model.json');
 } catch {
   MODEL = null; // not fitted yet: fall back to "the leader wins"
 }
@@ -25,11 +26,7 @@ function observe(src) {
   for (const v of color) counts[v]++;
   if (Array.isArray(src.fixedCells)) for (const i of src.fixedCells) fixed[color[i]]++;
   else if (src.fixed) src.fixed.forEach((f, i) => f && fixed[color[i]]++);
-  const R = src.opts?.charismaRadius;
-  for (const c of src.charismas || []) {
-    const r = c.radius ?? R;
-    spell[c.color] += (2 * r + 1) ** 2 / size;
-  }
+  for (const c of src.charismas || []) spell[c.color] += src.opts ? src.opts.charismaArea : (Math.PI * c.radius * c.radius) / size;
   const ticks = src.opts?.ticks ?? src.ticks;
   return { tick: src.tick, ticks, remaining: ticks - src.tick, size, counts, fixed, spell };
 }

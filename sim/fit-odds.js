@@ -7,6 +7,8 @@ const { World, DEFAULTS, makeRng } = require('../src/engine');
 const { observe, localCounts, features, binOf, softmax } = require('../src/odds');
 
 const ROUNDS = Number(process.argv[2] || 3000);
+// (simulation only) FIT_OPTS='{"movement":0.1}' fits for other laws, OUT=path writes elsewhere
+const OPTS = { ...DEFAULTS, ...JSON.parse(process.env.FIT_OPTS || '{}') };
 const EDGES = [0, 3, 6, 10, 15, 20, 25, 30, 40, 50, 1000]; // bins of "updates remaining"
 
 // Inventors are what shapes the world (predictions have no effect on it), so training
@@ -14,7 +16,7 @@ const EDGES = [0, 3, 6, 10, 15, 20, 25, 30, 40, 50, 1000]; // bins of "updates r
 function simulate(seed) {
   const rng = makeRng(seed);
   const N = 8 + Math.floor(rng() * 33);
-  const w = new World(N, DEFAULTS, seed * 7 + 1);
+  const w = new World(N, OPTS, seed * 7 + 1);
   const q = rng() * 0.7;
   const plans = Array.from({ length: N }, () => {
     if (rng() >= q) return null;
@@ -87,6 +89,6 @@ byBin.forEach((data, b) => {
   );
 });
 
-const out = path.join(__dirname, '..', 'src', 'odds-model.json');
+const out = process.env.OUT ? path.resolve(process.env.OUT) : path.join(__dirname, '..', 'src', 'odds-model.json');
 fs.writeFileSync(out, JSON.stringify({ edges: EDGES, weights, rounds: ROUNDS }, null, 2) + '\n');
 console.log('saved', path.relative(process.cwd(), out));

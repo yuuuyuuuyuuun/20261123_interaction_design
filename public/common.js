@@ -29,7 +29,7 @@ class WorldView {
     this.from = null;
     this.to = null;
     this.t0 = 0;
-    this.dur = 350;
+    this.dur = 0; // colors switch at once (a hue fade between colors is hard on the eyes)
     this.highlight = null; // cell index
     this.ripples = [];
     this.lastTick = -1;
@@ -52,6 +52,7 @@ class WorldView {
 
   current(now) {
     if (!this.to) return null;
+    if (!(this.dur > 0)) return this.to;
     const k = Math.min(1, (now - this.t0) / this.dur);
     const e = k * k * (3 - 2 * k);
     return this.to.map((c, i) => {
@@ -119,7 +120,7 @@ class WorldView {
       ctx.fill();
     }
 
-    // charisma: a pulsing aura over the people under its spell (wrapping around the edges)
+    // charisma: a pulsing disc over the people under its spell (wrapping around the edges)
     if ((world.charismas || []).length) {
       ctx.save();
       ctx.beginPath();
@@ -127,25 +128,25 @@ class WorldView {
       ctx.clip();
       for (const c of world.charismas) {
         const hex = COLORS[c.color].hex;
-        const side = (2 * c.radius + 1) * step;
+        const r = (c.radius + 0.5) * step;
         for (const wx of [-cols, 0, cols])
           for (const wy of [-world.rows, 0, world.rows]) {
-            const x = ox + (c.x + wx - c.radius) * step - L.gap / 2;
-            const y = oy + (c.y + wy - c.radius) * step - L.gap / 2;
-            if (x > canvas.width || y > canvas.height || x + side < 0 || y + side < 0) continue;
+            const cx = ox + (c.x + wx) * step + size / 2;
+            const cy = oy + (c.y + wy) * step + size / 2;
+            if (cx - r > canvas.width || cy - r > canvas.height || cx + r < 0 || cy + r < 0) continue;
             ctx.save();
-            ctx.globalAlpha = 0.16 + 0.12 * pulse;
-            ctx.fillStyle = hex;
-            roundRect(ctx, x, y, side, side, step * 0.8);
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.globalAlpha = 0.05; // barely tinted: mixing hues over the cells is hard on the eyes
+            ctx.fillStyle = '#fff';
             ctx.fill();
-            ctx.globalAlpha = 0.9;
+            ctx.globalAlpha = 0.75 + 0.25 * pulse;
             ctx.strokeStyle = hex;
             ctx.lineWidth = Math.max(2, size * 0.14);
             ctx.shadowColor = hex;
             ctx.shadowBlur = size;
             ctx.setLineDash([size * 0.5, size * 0.3]);
             ctx.lineDashOffset = -now / 30;
-            roundRect(ctx, x, y, side, side, step * 0.8);
             ctx.stroke();
             ctx.restore();
           }
@@ -184,17 +185,22 @@ class WorldView {
       }
     }
 
-    // movements: an expanding ring
+    // movements: an expanding ring, kept inside the board
     this.ripples = this.ripples.filter((rp) => now - rp.t0 < 1200);
-    for (const rp of this.ripples) {
-      const k = (now - rp.t0) / 1200;
+    if (this.ripples.length) {
       ctx.save();
-      ctx.strokeStyle = COLORS[rp.color].hex;
-      ctx.globalAlpha = 1 - k;
-      ctx.lineWidth = Math.max(3, size * 0.3) * (1 - k * 0.6);
       ctx.beginPath();
-      ctx.arc(ox + rp.x * step + size / 2, oy + rp.y * step + size / 2, rp.radius * step * (0.5 + k * 0.8), 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.rect(ox - L.gap, oy - L.gap, cols * step + L.gap, world.rows * step + L.gap);
+      ctx.clip();
+      for (const rp of this.ripples) {
+        const k = (now - rp.t0) / 1200;
+        ctx.strokeStyle = COLORS[rp.color].hex;
+        ctx.globalAlpha = 1 - k;
+        ctx.lineWidth = Math.max(3, size * 0.3) * (1 - k * 0.6);
+        ctx.beginPath();
+        ctx.arc(ox + rp.x * step + size / 2, oy + rp.y * step + size / 2, rp.radius * step * (0.5 + k * 0.8), 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 

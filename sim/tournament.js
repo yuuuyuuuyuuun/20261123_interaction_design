@@ -35,7 +35,7 @@ function playGame(types, opts, seed, rounds = 5) {
 
 function tournament(opts, { games = 200, N = 30, mode = 'equal', seed = 1 } = {}) {
   const names = Object.keys(BOT_TYPES);
-  const stat = Object.fromEntries(names.map((k) => [k, { seats: 0, wins: 0, points: 0, top3: 0 }]));
+  const stat = Object.fromEntries(names.map((k) => [k, { seats: 0, wins: 0, points: 0, top3: 0, rank: 0 }]));
   for (let g = 0; g < games; g++) {
     const rng = makeRng(seed * 1e5 + g);
     let types;
@@ -54,9 +54,18 @@ function tournament(opts, { games = 200, N = 30, mode = 'equal', seed = 1 } = {}
     const max = Math.max(...totals);
     const winners = totals.map((t, i) => (t === max ? i : -1)).filter((i) => i >= 0);
     const ranked = [...totals.keys()].sort((a, b) => totals[b] - totals[a]);
+    // rank 1..N, ties share the average of their places
+    const rankOf = new Array(N);
+    for (let a = 0; a < N; ) {
+      let b = a;
+      while (b + 1 < N && totals[ranked[b + 1]] === totals[ranked[a]]) b++;
+      for (let k = a; k <= b; k++) rankOf[ranked[k]] = (a + b) / 2 + 1;
+      a = b + 1;
+    }
     types.forEach((t, i) => {
       stat[t].seats++;
       stat[t].points += totals[i];
+      stat[t].rank += rankOf[i];
     });
     winners.forEach((i) => (stat[types[i]].wins += 1 / winners.length));
     ranked.slice(0, 3).forEach((i) => stat[types[i]].top3++);
@@ -71,15 +80,16 @@ function tournament(opts, { games = 200, N = 30, mode = 'equal', seed = 1 } = {}
       winIndex: s.seats ? s.wins / games / (s.seats / seats) : NaN, // 1 = wins as often as its share of seats
       top3Index: s.seats ? s.top3 / (3 * games) / (s.seats / seats) : NaN,
       perRound: s.seats ? s.points / s.seats / 5 : NaN,
+      avgRank: s.seats ? s.rank / s.seats : NaN, // 1 = always first, N = always last
     };
   });
 }
 
 function report(rows) {
   const f = (x) => (isNaN(x) ? '   - ' : x.toFixed(2).padStart(5));
-  console.log('戦略'.padEnd(10), '1ラウンド平均点  優勝指数  3位以内指数   (指数1.00 = 人数の割合どおりに勝つ)');
-  for (const r of [...rows].sort((a, b) => b.winIndex - a.winIndex))
-    console.log(r.label.padEnd(10), r.perRound.toFixed(1).padStart(8), '      ', f(r.winIndex), '    ', f(r.top3Index));
+  console.log('戦略'.padEnd(10), '平均順位(30人中)  1ラウンド平均点  優勝指数   (優勝指数1.00 = 人数の割合どおりに優勝)');
+  for (const r of [...rows].sort((a, b) => a.avgRank - b.avgRank))
+    console.log(r.label.padEnd(10), r.avgRank.toFixed(1).padStart(8), '        ', r.perRound.toFixed(1).padStart(8), '      ', f(r.winIndex));
 }
 
 if (require.main === module) {

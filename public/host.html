@@ -40,7 +40,7 @@
   .legend .sw.p::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: rgba(10,12,20,.7); }
   .legend .sw.inv { box-shadow: 0 0 10px var(--red); outline: 2px solid #fff; outline-offset: -4px; background: var(--red); }
   .legend .sw.mv { background: transparent; border: 3px solid var(--yellow); border-radius: 50%; box-shadow: 0 0 8px var(--yellow); }
-  .legend .sw.ch { background: rgba(76,141,255,.35); border: 2px dashed var(--blue); box-shadow: 0 0 8px var(--blue); }
+  .legend .sw.ch { background: rgba(76,141,255,.35); border: 2px dashed var(--blue); box-shadow: 0 0 8px var(--blue); border-radius: 50%; }
   .controls { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
   .settings { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; font-size: 14px; align-items: center; }
   .settings .sec { grid-column: 1 / -1; font-size: 12px; letter-spacing: .12em; color: var(--muted); margin-top: 6px; }
@@ -54,7 +54,9 @@
   .future { font-size: clamp(48px, 8vw, 120px); font-weight: 900; letter-spacing: .04em; }
   .sub { font-size: 24px; }
   #hist { width: min(720px, 80%); height: 150px; }
-  .rank { font-size: 17px; display: grid; grid-template-columns: 2em 1fr auto; gap: 4px 14px; }
+  .rank { font-size: 16px; display: grid; grid-template-columns: 2.4em 1fr auto; gap: 3px 14px; max-height: 38vh; overflow-y: auto; padding-right: 6px; scrollbar-width: thin; }
+  .rank .me { color: #fff; font-weight: 700; }
+  .rank .bot { color: var(--muted); }
   .rank .pts { font-variant-numeric: tabular-nums; font-weight: 700; }
   .timeline { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
   .era { width: 150px; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
@@ -140,7 +142,7 @@
     </div>
 
     <div id="rankingBox" class="hidden">
-      <div class="label">ランキング</div>
+      <div class="label">ランキング（全<span id="rankCount">0</span>人・スクロールで全員）</div>
       <div class="rank" id="ranking"></div>
     </div>
 

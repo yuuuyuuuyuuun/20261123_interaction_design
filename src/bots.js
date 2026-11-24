@@ -16,8 +16,8 @@ const BOT_TYPES = {
   whim: { label: '気まぐれ予言', short: '気分', desc: '好きな色を予言し、ときどき気が変わる' },
   inventEarly: { label: '早期発明', short: '早発', desc: '開始直後に、勝ちそうな色を発明する' },
   local: { label: '地元発明', short: '地元', desc: '自分の周りに仲間が3人以上いる色を、その場で発明する' },
-  inventLate: { label: '機を見て発明', short: '機発', desc: '予言で様子を見て、途中で勝ちそうな色を発明する' },
-  bandwagon: { label: '勝ち馬発明', short: '勝馬', desc: '予言で様子を見て、勝ちがほぼ確実になった色を発明する' },
+  inventLate: { label: '機を見て発明', short: '機発', desc: '何も宣言せずに様子を見て、途中で勝ちそうな色を発明する' },
+  bandwagon: { label: '勝ち馬発明', short: '勝馬', desc: '何も宣言せずに様子を見て、勝率が60%を超えた色を発明する' },
   contrarian: { label: '逆張り発明', short: '逆張', desc: '開始直後に、最も少ない色を発明する' },
 };
 const HIDDEN_TYPES = {};
@@ -111,13 +111,15 @@ function createBot(type, rng, ticks) {
           if (nb[best] >= 3) return api.invent(best);
           return predictByValue(view, decl, api);
         }
+        // waiting inventors declare nothing before inventing: by the rules, inventing is a
+        // new declaration, so an earlier prediction would only be thrown away
         case 'inventLate':
-          if (t >= midpoint) return api.invent(argmax(winProbs(view)));
-          return predictByValue(view, decl, api);
+          if (t >= midpoint) api.invent(argmax(winProbs(view)));
+          return;
         case 'bandwagon': {
           const p = winProbs(view);
-          if (p[argmax(p)] >= 0.85) return api.invent(argmax(p));
-          return predictByValue(view, decl, api, p);
+          if (p[argmax(p)] >= 0.6 || view.remaining <= 3) api.invent(argmax(p));
+          return;
         }
         case 'contrarian':
           return api.invent(view.counts.indexOf(Math.min(...view.counts)));

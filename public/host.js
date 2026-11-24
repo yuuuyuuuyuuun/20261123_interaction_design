@@ -108,10 +108,16 @@ function render() {
   const bots = s.players.length - humans.length;
   $('pcount').textContent = `${s.humanCount}${bots ? ` ＋ボット${bots}` : ''}`;
   $('players').innerHTML = humans.map((p) => `<span class="chip ${p.online ? '' : 'off'}">${esc(p.name)}</span>`).join('');
+  // full ranking (scrollable); tied totals share a place
+  let place = 0;
   $('ranking').innerHTML = s.players
-    .slice(0, 10)
-    .map((p, i) => `<span class="muted">${i + 1}</span><span>${esc(p.name)}</span><span class="pts">${p.total}</span>`)
+    .map((p, i) => {
+      if (i === 0 || p.total !== s.players[i - 1].total) place = i + 1;
+      const cls = p.bot ? 'bot' : 'me';
+      return `<span class="muted">${place}</span><span class="${cls}">${esc(p.name)}</span><span class="pts">${p.total}</span>`;
+    })
     .join('');
+  $('rankCount').textContent = s.players.length;
 
   const btn = $('startBtn');
   btn.disabled = !editable || s.playerCount === 0;

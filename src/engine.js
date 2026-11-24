@@ -57,14 +57,14 @@ const DEFAULTS = {
   //   sample: look at `sample` random neighbors and take their most common color
   sample: 3,
   // ムーブメント
-  movement: 0.066, // probability per update (once ramped up)
+  movement: 0.12, // probability per update (once ramped up)
   movementRamp: [0.15, 0.4], // none before 15% of the round, full rate from 40%
   quietFrom: 0.85, // no new movements or charismas in the last 15% of a round: the end is decided by what everyone can already see
-  movementRadius: [0.1, 0.18], // relative to the shorter side of the board
+  movementArea: [0.25, 0.5], // share of the board one movement paints (a disc), whatever the board size
   movementTarget: 'trailing', // 'trailing': only colors that are behind | 'any'
   // カリスマ
-  charisma: 0.22, // probability per update that an inventor of a trailing color gets it
-  charismaRadius: 2, // the people within this many cells (a square) are under its spell
+  charisma: 0.15, // probability per update that an inventor of a trailing color gets it
+  charismaArea: 0.05, // share of the board under its spell (a disc around the inventor)
   charismaTurns: [5, 8],
   charismaPull: 30, // extra pull toward its color for the people under its spell (saturate/sample laws)
   charismaReach: 0.5, // voices/ally laws: chance per update that a person under the spell takes its color
@@ -226,20 +226,30 @@ class World {
     const rng = this.rng;
     const choices = o.movementTarget === 'trailing' ? this.trailing(counts) : [...counts.keys()];
     const color = choices[Math.floor(rng() * choices.length)];
-    const short = Math.min(this.cols, this.rows);
-    const [ra, rb] = o.movementRadius;
-    const radius = Math.max(1, short * (ra + rng() * (rb - ra)));
+    const [a, b] = o.movementArea;
+    const radius = this.radiusFor(a + rng() * (b - a));
     const cx = Math.floor(rng() * this.cols);
     const cy = Math.floor(rng() * this.rows);
-    for (let i = 0; i < this.size; i++) {
-      if (this.fixed[i]) continue;
-      let dx = Math.abs((i % this.cols) - cx);
-      let dy = Math.abs(((i / this.cols) | 0) - cy);
-      dx = Math.min(dx, this.cols - dx);
-      dy = Math.min(dy, this.rows - dy);
-      if (dx * dx + dy * dy <= radius * radius) next[i] = color;
-    }
+    for (const i of this.disc(cx, cy, radius)) if (!this.fixed[i]) next[i] = color;
     this.events.push({ kind: 'movement', x: cx, y: cy, radius, color });
+  }
+
+  /** radius of a disc that covers `share` of the board */
+  radiusFor(share) {
+    return Math.max(1, Math.sqrt((share * this.size) / Math.PI));
+  }
+
+  /** cells within `r` of (cx, cy) on the torus */
+  disc(cx, cy, r) {
+    const out = [];
+    const R = Math.ceil(r);
+    for (let dy = -R; dy <= R; dy++)
+      for (let dx = -R; dx <= R; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        if (2 * Math.abs(dx) >= this.cols || 2 * Math.abs(dy) >= this.rows) continue;
+        out.push(((cy + dy + this.rows) % this.rows) * this.cols + ((cx + dx + this.cols) % this.cols));
+      }
+    return [...new Set(out)];
   }
 
   /** カリスマ: one inventor of a color that is behind becomes persuasive for a while */
@@ -259,7 +269,7 @@ class World {
       kind: 'charisma',
       x: c.cell % this.cols,
       y: (c.cell / this.cols) | 0,
-      radius: o.charismaRadius,
+      radius: this.radiusFor(o.charismaArea),
       color: c.color,
       player: p,
     });
@@ -267,16 +277,9 @@ class World {
 
   castSpells() {
     this.spell.fill(-1);
-    const R = this.opts.charismaRadius;
-    for (const c of this.charismas) {
-      const x0 = c.cell % this.cols;
-      const y0 = (c.cell / this.cols) | 0;
-      for (let dy = -R; dy <= R; dy++)
-        for (let dx = -R; dx <= R; dx++) {
-          const j = ((y0 + dy + this.rows) % this.rows) * this.cols + ((x0 + dx + this.cols) % this.cols);
-          this.spell[j] = c.color;
-        }
-    }
+    const r = this.radiusFor(this.opts.charismaArea);
+    for (const c of this.charismas)
+      for (const j of this.disc(c.cell % this.cols, (c.cell / this.cols) | 0, r)) this.spell[j] = c.color;
   }
 
   /** the color a free cell takes when it reconsiders */
@@ -401,7 +404,7 @@ class World {
         player: c.player,
         x: c.cell % this.cols,
         y: (c.cell / this.cols) | 0,
-        radius: this.opts.charismaRadius,
+        radius: this.radiusFor(this.opts.charismaArea),
         color: c.color,
         left: c.until - this.tick,
       })),
