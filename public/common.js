@@ -1,11 +1,64 @@
 'use strict';
 /* shared by host and player pages */
 
+// The three kinds of land. Each has a fill color and a simple glyph drawn in a darker ink,
+// so they can be told apart on a small screen and without relying on color alone.
 const COLORS = [
-  { name: '赤', hex: '#ff5a5f' },
-  { name: '青', hex: '#4c8dff' },
-  { name: '黄', hex: '#ffc83d' },
+  { key: 'city', name: '都市', hex: '#c3cedd', ink: '#6b7b93' }, // bluish light gray, windows
+  { key: 'nature', name: '自然', hex: '#5bb26f', ink: '#246236' }, // green, a tree
+  { key: 'wild', name: '荒野', hex: '#ef9146', ink: '#9c4a12' }, // orange, diagonal stripes
 ];
+
+/** draws the glyph of land `k` inside the square (x, y, s); the caller has filled the base */
+function drawGlyph(ctx, k, x, y, s) {
+  ctx.fillStyle = COLORS[k].ink;
+  ctx.strokeStyle = COLORS[k].ink;
+  if (k === 0) {
+    // 都市: four windows
+    const w = s * 0.17;
+    const g = s * 0.1;
+    const o = (s - 2 * w - g) / 2;
+    for (const dx of [0, w + g]) for (const dy of [0, w + g]) ctx.fillRect(x + o + dx, y + o + dy, w, w);
+  } else if (k === 1) {
+    // 自然: a tree
+    ctx.beginPath();
+    ctx.moveTo(x + s * 0.5, y + s * 0.18);
+    ctx.lineTo(x + s * 0.76, y + s * 0.66);
+    ctx.lineTo(x + s * 0.24, y + s * 0.66);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(x + s * 0.44, y + s * 0.64, s * 0.12, s * 0.16);
+  } else {
+    // 荒野: diagonal stripes that repeat from land to land
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, s, s);
+    ctx.clip();
+    ctx.lineWidth = s * 0.12;
+    ctx.lineCap = 'butt';
+    for (const k2 of [-0.5, 0, 0.5]) {
+      ctx.beginPath();
+      ctx.moveTo(x + s * k2, y + s);
+      ctx.lineTo(x + s * (k2 + 1), y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+let iconSeq = 0;
+/** the same land as a small inline SVG, for buttons and labels */
+function landIcon(k, px = 20) {
+  const c = COLORS[k];
+  const id = `li${++iconSeq}`;
+  let g;
+  if (k === 0) g = [[7, 7], [13, 7], [7, 13], [13, 13]].map(([x, y]) => `<rect x="${x - 0.1}" y="${y - 0.1}" width="4.2" height="4.2" fill="${c.ink}"/>`).join('');
+  else if (k === 1) g = `<path d="M12 4.3 L18.2 15.8 H5.8 Z" fill="${c.ink}"/><rect x="10.6" y="15.4" width="2.8" height="3.8" fill="${c.ink}"/>`;
+  else
+    g = `<clipPath id="${id}"><rect width="24" height="24" rx="5"/></clipPath><g clip-path="url(#${id})" stroke="${c.ink}" stroke-width="2.9">` +
+      [-12, 0, 12].map((o) => `<line x1="${o}" y1="24" x2="${o + 24}" y2="0"/>`).join('') + '</g>';
+  return `<svg class="land-icon" width="${px}" height="${px}" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5" fill="${c.hex}"/>${g}</svg>`;
+}
 
 const BASE_YEAR = 2030;
 const yearOf = (round) => BASE_YEAR + (round - 1) * 10;
@@ -84,6 +137,28 @@ class WorldView {
     (world.playerCell || []).forEach((cell, i) => this.nameAt.set(cell, world.names?.[i] ?? ''));
   }
 
+  /** one tile per kind of land at the current size (rebuilt only when the size changes) */
+  tiles(size, rad) {
+    const px = Math.max(2, Math.ceil(size));
+    if (this._tiles?.px === px) return this._tiles.list;
+    const list = COLORS.map((c, k) => {
+      const t = document.createElement('canvas');
+      t.width = t.height = px;
+      const g = t.getContext('2d');
+      g.fillStyle = c.hex;
+      roundRect(g, 0, 0, px, px, (rad * px) / size);
+      g.fill();
+      g.save();
+      roundRect(g, 0, 0, px, px, (rad * px) / size);
+      g.clip();
+      drawGlyph(g, k, 0, 0, px);
+      g.restore();
+      return t;
+    });
+    this._tiles = { px, list };
+    return list;
+  }
+
   layout() {
     const { cols, rows } = this.world;
     const W = this.canvas.width;
@@ -102,7 +177,6 @@ class WorldView {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!world) return;
     const now = performance.now();
-    const rgb = this.current(now);
     const { cols } = world;
     const L = this.layout();
     if (!(L.size > 1)) return;
@@ -110,14 +184,12 @@ class WorldView {
     const rad = size * 0.22;
     const pulse = 0.5 + 0.5 * Math.sin(now / 380);
 
-    // cells
+    // lands: a pre-drawn tile per kind
+    const tiles = this.tiles(size, rad);
     for (let i = 0; i < world.color.length; i++) {
       const x = ox + (i % cols) * step;
       const y = oy + Math.floor(i / cols) * step;
-      const [r, g, b] = rgb[i];
-      ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
-      roundRect(ctx, x, y, size, size, rad);
-      ctx.fill();
+      ctx.drawImage(tiles[world.color[i]], x, y, size, size);
     }
 
     // charisma: a pulsing disc over the people under its spell (wrapping around the edges)
@@ -154,16 +226,15 @@ class WorldView {
       ctx.restore();
     }
 
-    // players: a dark dot (or their name); inventors: a glowing white frame
-    const fontPx = size * 0.3;
-    const showNames = this.opts.names && fontPx >= 10 * this.dpr;
+    // citizens: a small dot in the corner (or their name); inventors: a glowing white frame
+    const fontPx = size * 0.26;
+    const showNames = this.opts.names && fontPx >= 9 * this.dpr;
     for (const [cell, name] of this.nameAt) {
       const x = ox + (cell % cols) * step;
       const y = oy + Math.floor(cell / cols) * step;
       if (this.fixedSet.has(cell)) {
-        const [r, g, b] = rgb[cell];
         ctx.save();
-        ctx.shadowColor = `rgba(${r | 0},${g | 0},${b | 0},1)`;
+        ctx.shadowColor = COLORS[world.color[cell]].hex;
         ctx.shadowBlur = size * (0.6 + 0.4 * pulse);
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = Math.max(1.5, size * 0.14);
@@ -172,16 +243,23 @@ class WorldView {
         ctx.restore();
       }
       if (showNames) {
-        ctx.fillStyle = 'rgba(10,12,20,.85)';
+        ctx.fillStyle = 'rgba(10,12,20,.72)';
+        roundRect(ctx, x + size * 0.03, y + size * 0.6, size * 0.94, size * 0.36, size * 0.1);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
         ctx.font = `700 ${Math.round(fontPx)}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(clip(ctx, name, size * 0.92), x + size / 2, y + size / 2);
+        ctx.fillText(clip(ctx, name, size * 0.9), x + size / 2, y + size * 0.785);
       } else {
-        ctx.fillStyle = 'rgba(10,12,20,.7)';
+        const r = Math.max(1.8, size * 0.12);
         ctx.beginPath();
-        ctx.arc(x + size / 2, y + size / 2, Math.max(1.5, size * 0.14), 0, Math.PI * 2);
+        ctx.arc(x + size * 0.8, y + size * 0.2, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(10,12,20,.85)';
         ctx.fill();
+        ctx.lineWidth = Math.max(1, size * 0.05);
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
       }
     }
 

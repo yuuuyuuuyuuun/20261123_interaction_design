@@ -10,6 +10,21 @@ $('qr').src = '/qr.svg?u=' + encodeURIComponent(joinUrl);
 $('url').textContent = joinUrl;
 
 let state = null;
+
+// legend: drawn with the same land tiles as the board
+(function legend() {
+  const tile = (inner = '') =>
+    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5" fill="${COLORS[0].hex}"/>${inner}</svg>`;
+  $('legend').innerHTML = [
+    `${landIcon(0, 20)}${landIcon(1, 20)}${landIcon(2, 20)}<span>土地の種類（都市・自然・荒野）</span>`,
+    `${tile('<circle cx="19" cy="5" r="3.2" fill="#0a0c14" stroke="#fff" stroke-width="1.4"/>')}<span>市民の土地（右上の点、または名前）</span>`,
+    `${tile('<rect x="3" y="3" width="18" height="18" rx="3.5" fill="none" stroke="#fff" stroke-width="3"/>')}<span>発明した市民の土地（もう変わらない）</span>`,
+    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="${COLORS[1].hex}" stroke-width="3" stroke-dasharray="5 3"/></svg><span>カリスマ（負けている種類を発明した市民が周りを強く染める）</span>`,
+    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="${COLORS[2].hex}" stroke-width="3.5"/></svg><span>ムーブメント（一帯が負けている種類に）</span>`,
+  ]
+    .map((h) => `<div>${h}</div>`)
+    .join('');
+})();
 let botInputsBuilt = false;
 
 socket.on('denied', () => $('denied').classList.remove('hidden'));
@@ -99,7 +114,7 @@ function render() {
   const counts = s.world?.counts || [0, 0, 0];
   const n = counts.reduce((a, b) => a + b, 0) || 1;
   $('bars').innerHTML = COLORS.map(
-    (c, i) => `<div class="bar"><span style="color:${c.hex}">${c.name}</span>
+    (c, i) => `<div class="bar"><span class="nm" style="color:${c.hex}">${landIcon(i, 22)}${c.name}</span>
       <div class="track"><div class="fill" style="width:${(100 * counts[i]) / n}%;background:${c.hex}"></div></div>
       <span class="count">${counts[i]}</span></div>`
   ).join('');

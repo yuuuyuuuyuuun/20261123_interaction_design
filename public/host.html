@@ -31,7 +31,10 @@
   .big { font-size: 60px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
   .year { font-size: 26px; font-weight: 700; }
   .bars { display: flex; flex-direction: column; gap: 10px; }
-  .bar { display: grid; grid-template-columns: 28px 1fr 48px; align-items: center; gap: 10px; font-weight: 700; }
+  .bar { display: grid; grid-template-columns: 76px 1fr 48px; align-items: center; gap: 10px; font-weight: 700; }
+  .bar .nm { display: inline-flex; align-items: center; gap: 6px; }
+  .legend > div { display: flex; align-items: center; gap: 8px; }
+  .legend svg { flex: none; }
   .track { height: 16px; background: #0d1018; border-radius: 99px; overflow: hidden; }
   .fill { height: 100%; border-radius: 99px; transition: width .35s ease; }
   .count { text-align: right; font-variant-numeric: tabular-nums; }
@@ -82,12 +85,12 @@
           <div>
             <p class="title">予言するか。<br>発明するか。</p>
             <ol class="rules">
-              <li>あなたは世界の<b>1マス</b>。世界には、発明しない<b>群衆</b>もいます。</li>
-              <li>マスは周りの色に染まります。<b>同じ色が2〜3人いれば十分</b>なので、小さな塊でも根付いて広がります。</li>
-              <li>負けている色の発明者には、ときどき<b>カリスマ</b>が宿り、数ターン周りを強く染めます。小さな<b>ムーブメント</b>も起こります（終盤は起きません）。</li>
-              <li>終了時に<b>最も多い色</b>が「未来」。<b>早く言い当てるほど高得点</b>。</li>
-              <li><b>予言</b>はいつでも変えられる。あなたは流され続ける。</li>
-              <li><b>発明</b>は取り消せない。あなたはその色で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
+              <li>あなたは<b>市民</b>として、世界の<b>土地</b>のひとつに住んでいます。世界には市民のいない土地もあります。</li>
+              <li>土地には<b>都市・自然・荒野</b>の3種類があり、周りの土地の種類に染まります。<b>同じ種類が2〜3つ隣にあれば十分</b>なので、小さな塊でも根付いて広がります。</li>
+              <li>負けている種類を発明した市民には、ときどき<b>カリスマ</b>が宿り、数ターン周りを強く染めます。まれに大きな<b>ムーブメント</b>も起こります（終盤は起きません）。</li>
+              <li>終了時に<b>最も多い種類</b>が「未来」。<b>早く言い当てるほど高得点</b>。</li>
+              <li><b>予言</b>はいつでも変えられる。あなたの土地は流され続ける。</li>
+              <li><b>発明</b>は取り消せない。あなたの土地はその種類で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
             </ol>
             <div class="url muted" id="url"></div>
           </div>
@@ -132,13 +135,7 @@
       <div class="label">立ち止まった発明者</div>
       <div class="big" id="inventors" style="font-size:40px">0</div>
     </div>
-    <div class="legend">
-      <div><span class="sw"></span>群衆（発明しない人々）</div>
-      <div><span class="sw p"></span>プレイヤー（予言者・未宣言）</div>
-      <div><span class="sw inv"></span>発明者（もう色が変わらない）</div>
-      <div><span class="sw ch"></span>カリスマ（負けている色の発明者が周りを強く染める）</div>
-      <div><span class="sw mv"></span>ムーブメント（一帯が負けている色に）</div>
-    </div>
+    <div class="legend" id="legend"></div>
     </div>
 
     <div id="rankingBox" class="hidden">

@@ -53,11 +53,12 @@ $('nameInput').addEventListener('keydown', (e) => e.key === 'Enter' && $('joinBt
 
 // ---- choices: one tap each
 $('predictRow').innerHTML = COLORS.map(
-  (c, i) => `<button class="choice" data-act="predict" data-c="${i}" style="background:${c.hex}">${c.name}</button>`
+  (c, i) => `<button class="choice" data-act="predict" data-c="${i}" style="background:${c.hex}">${landIcon(i, 28)}${c.name}</button>`
 ).join('');
 $('inventRow').innerHTML = COLORS.map(
-  (c, i) => `<button class="choice inv" data-act="invent" data-c="${i}" style="color:${c.hex}">${c.name}</button>`
+  (c, i) => `<button class="choice inv" data-act="invent" data-c="${i}" style="color:${c.hex}">${landIcon(i, 28)}${c.name}</button>`
 ).join('');
+const landLabel = (k) => `<span class="land-inline" style="color:${COLORS[k].hex}">${landIcon(k, 18)}${COLORS[k].name}</span>`;
 $('controls').addEventListener('click', (e) => {
   const b = e.target.closest('.choice');
   if (!b || b.disabled) return;
@@ -76,7 +77,10 @@ function screen(id) {
   for (const s of ['join', 'wait', 'play', 'result']) $(s).classList.toggle('hidden', s !== id);
 }
 
+let cdTimer = null;
+
 function render() {
+  clearInterval(cdTimer);
   if (!joined) return screen('join');
   const s = state;
   if (!s) return screen('wait');
@@ -129,9 +133,21 @@ function renderPlay(s, me) {
   view.set(s.world);
   view.highlight = inWorld ? me.cell : null;
 
-  $('phaseLbl').textContent = playing ? '未来まで' : '観察タイム';
-  $('remain').textContent = playing ? s.remaining : '…';
+  $('phaseLbl').textContent = playing ? '未来まで' : '開始まで';
+  $('remain').textContent = playing ? s.remaining : '';
   $('worth').textContent = playing ? `+${s.remaining}` : `+${s.ticks}`;
+  // countdown before the round starts (the same as on the big screen)
+  $('countdown').classList.toggle('hidden', playing);
+  if (!playing) {
+    const end = Date.now() + (s.observeLeft || 0);
+    const tick = () => {
+      const sec = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      $('cdNum').textContent = sec;
+      $('remain').textContent = sec;
+    };
+    tick();
+    cdTimer = setInterval(tick, 200);
+  }
 
   $('spectate').classList.toggle('hidden', !!inWorld);
   if (!inWorld) {
@@ -144,18 +160,18 @@ function renderPlay(s, me) {
   const decl = me.decl;
   if (decl) selected = decl.color;
   const myColor = s.world.color[me.cell];
-  $('meLine').innerHTML = `白い輪の中があなた（いま<b style="color:${COLORS[myColor].hex}">${COLORS[myColor].name}</b>）` +
-    (decl && !decl.invented ? ` ・ 予言：<b style="color:${COLORS[decl.color].hex}">${COLORS[decl.color].name}</b>（当たれば +${s.ticks - decl.tick}）` : '');
+  $('meLine').innerHTML = `白い輪の中があなたの土地（いま${landLabel(myColor)}）` +
+    (decl && !decl.invented ? ` ・ 予言：${landLabel(decl.color)}（当たれば +${s.ticks - decl.tick}）` : '');
 
   const invented = decl?.invented;
   const spell = (s.world.charismas || []).find((c) => c.player === me.index);
   if (spell)
-    $('meLine').innerHTML = `<b style="color:${COLORS[spell.color].hex}">カリスマが宿った！</b> 周りの人があなたの色に染まりやすい（あと${spell.left}ターン）`;
+    $('meLine').innerHTML = `<b style="color:${COLORS[spell.color].hex}">カリスマが宿った！</b> 周りの土地があなたの${landLabel(spell.color)}に染まりやすい（あと${spell.left}ターン）`;
   $('controls').classList.toggle('hidden', !!invented);
   $('fixedBox').classList.toggle('hidden', !invented);
   if (invented) {
     const c = COLORS[decl.color];
-    $('fixedBox').innerHTML = `あなたは「<span style="color:${c.hex}">${c.name}</span>」を発明した。<br>あなたのマスはもう流されない。<br><span class="muted">当たれば +${s.ticks - decl.tick}</span>`;
+    $('fixedBox').innerHTML = `あなたは${landLabel(decl.color)}を発明した。<br>あなたの土地はもう流されない。<br><span class="muted">当たれば +${s.ticks - decl.tick}</span>`;
     return;
   }
 
