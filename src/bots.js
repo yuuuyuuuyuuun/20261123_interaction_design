@@ -163,6 +163,16 @@ function createBot(type, rng, ticks, opts = {}) {
           type = 'mixed';
           return this.act(view, me, api);
         }
+        // simulations: a cartel invents the runner-up color together at update `opts.at`
+        // (everyone computes it from the same board, so they agree without talking)
+        case 'cartel': {
+          if (decl || t < (opts.at ?? 3)) return;
+          const p = winProbs(view);
+          const max = Math.max(...view.counts);
+          const behind = [...p.keys()].filter((c) => view.counts[c] < max);
+          const pool = behind.length ? behind : [...p.keys()];
+          return api.invent(pool.reduce((b, c) => (p[c] > p[b] ? c : b), pool[0]));
+        }
         case 'inventAt': // simulations: wait `opts.wait` updates, declaring nothing, then invent
           if (t >= (opts.wait ?? 0)) api.invent(choose(winProbs(view), me.local, me.color));
           return;
