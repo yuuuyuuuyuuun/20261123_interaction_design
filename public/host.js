@@ -16,11 +16,10 @@ let state = null;
   const tile = (inner = '') =>
     `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="5" fill="${COLORS[0].hex}"/>${inner}</svg>`;
   $('legend').innerHTML = [
-    `${landIcon(0, 20)}${landIcon(1, 20)}${landIcon(2, 20)}<span>土地の種類（都市・自然・荒野）</span>`,
     `${tile('<circle cx="19" cy="5" r="3.2" fill="#0a0c14" stroke="#fff" stroke-width="1.4"/>')}<span>市民の土地（右上の点、または名前）</span>`,
-    `${tile('<rect x="3" y="3" width="18" height="18" rx="3.5" fill="none" stroke="#fff" stroke-width="3"/>')}<span>発明した市民の土地（もう変わらない）</span>`,
-    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="${COLORS[1].hex}" stroke-width="3" stroke-dasharray="5 3"/></svg><span>カリスマ（負けている種類を発明した市民が周りを強く染める）</span>`,
-    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="${COLORS[2].hex}" stroke-width="3.5"/></svg><span>ムーブメント（一帯が負けている種類に）</span>`,
+    `${tile('<rect x="3" y="3" width="18" height="18" rx="3.5" fill="none" stroke="#fff" stroke-width="3"/>')}<span>発明者の土地（もう変わらない）</span>`,
+    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="${COLORS[1].hex}" stroke-width="3" stroke-dasharray="5 3"/></svg><span>カリスマ（不利な発明者に宿り、強い影響力を持つ）</span>`,
+    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="${COLORS[2].hex}" stroke-width="3.5"/></svg><span>ムーブメント（低確率で発生する大事件）</span>`,
   ]
     .map((h) => `<div>${h}</div>`)
     .join('');
@@ -104,7 +103,7 @@ function render() {
     lastEventTick = s.world.tick;
     const ev = s.world.events[s.world.events.length - 1];
     const c = COLORS[ev.color];
-    toast(ev.kind === 'charisma' ? `${s.world.names[ev.player]} にカリスマが宿った（${c.name}）` : `${c.name}のムーブメント`, c.hex);
+    toast(ev.kind === 'charisma' ? `${c.name}のカリスマ、${s.world.names[ev.player]}` : `${c.name}のムーブメント！`, c.hex);
   }
 
   $('roundLabel').textContent = s.round ? `${yearOf(s.round)}年代（${s.round}/${s.rounds}）` : `全${s.rounds}ラウンド`;
@@ -162,8 +161,8 @@ function renderResult(r) {
   el.style.color = r.future >= 0 ? COLORS[r.future].hex : '';
   $('resultInv').textContent =
     r.inventors === 0
-      ? '誰も立ち止まらなかった。世界はなりゆきで決まった。'
-      : `${r.inventors}人が立ち止まり、そのうち${r.inventorsOfFuture}人がこの未来を発明した。`;
+      ? '誰も発明しなかった。世界はなりゆきで決まった。'
+      : `${r.inventors}人が発明をはじめ、そのうち${r.inventorsOfFuture}人がこの未来を創造した。`;
   requestAnimationFrame(() => drawHistory($('hist'), r.history));
 }
 
