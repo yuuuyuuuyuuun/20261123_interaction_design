@@ -89,7 +89,7 @@ function render() {
 
   if (s.phase === 'lobby') {
     $('waitTitle').textContent = '参加しました';
-    $('waitText').textContent = '大画面でゲームが始まるのを待っています。';
+    $('waitText').textContent = 'ゲームが始まるのを待っています。';
     selected = null;
     return screen('wait');
   }
@@ -107,7 +107,7 @@ function render() {
   if (!r) return;
   $('rYear').textContent = `${yearOf(r.round)}年代`;
   const f = r.future;
-  $('rFuture').textContent = f < 0 ? '未来は定まらなかった' : `未来は「${COLORS[f].name}」`;
+  $('rFuture').textContent = f < 0 ? '未来は定まらなかった' : `「${COLORS[f].name}」の未来`;
   $('rFuture').style.color = f >= 0 ? COLORS[f].hex : '';
   const mine = me && r.perPlayer[me.id];
   if (!mine) {
@@ -166,12 +166,12 @@ function renderPlay(s, me) {
   const invented = decl?.invented;
   const spell = (s.world.charismas || []).find((c) => c.player === me.index);
   if (spell)
-    $('meLine').innerHTML = `<b style="color:${COLORS[spell.color].hex}">カリスマが宿った！</b> 周りの土地があなたの${landLabel(spell.color)}に染まりやすい（あと${spell.left}ターン）`;
+    $('meLine').innerHTML = `<b style="color:${COLORS[spell.color].hex}">カリスマが宿った！</b> `;
   $('controls').classList.toggle('hidden', !!invented);
   $('fixedBox').classList.toggle('hidden', !invented);
   if (invented) {
     const c = COLORS[decl.color];
-    $('fixedBox').innerHTML = `あなたは${landLabel(decl.color)}を発明した。<br>あなたの土地はもう流されない。<br><span class="muted">当たれば +${s.ticks - decl.tick}</span>`;
+    $('fixedBox').innerHTML = `あなたは${landLabel(decl.color)}を発明する。<br>あなたの土地はもう流されない。<br><span class="muted">当たれば +${s.ticks - decl.tick}</span>`;
     return;
   }
 
