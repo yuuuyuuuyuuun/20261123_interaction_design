@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>世界は、わたしたちでできている — 大画面</title>
+<title>未来を予測する最善の方法は、それを発明することだ — 大画面</title>
 <link rel="stylesheet" href="/style.css">
 <style>
   body { overflow: hidden; }
@@ -74,7 +74,7 @@
 <body>
 <div class="app">
   <main>
-    <h1>世界は、わたしたちでできている</h1>
+    <h1>未来を予測する最善の方法は、それを発明することだ</h1>
     <div class="stage">
       <canvas id="world"></canvas>
       <div class="toast" id="toast" style="opacity:0"></div>
@@ -85,12 +85,11 @@
           <div>
             <p class="title">予言するか。<br>発明するか。</p>
             <ol class="rules">
-              <li>あなたは<b>市民</b>として、世界の<b>土地</b>のひとつに住んでいます。世界には市民のいない土地もあります。</li>
-              <li>土地には<b>都市・自然・荒野</b>の3種類があり、周りの土地の種類に染まります。<b>同じ種類が2〜3つ隣にあれば十分</b>なので、小さな塊でも根付いて広がります。</li>
-              <li>負けている種類を発明した市民には、ときどき<b>カリスマ</b>が宿り、数ターン周りを強く染めます。まれに大きな<b>ムーブメント</b>も起こります（終盤は起きません）。</li>
-              <li>終了時に<b>最も多い種類</b>が「未来」。<b>早く言い当てるほど高得点</b>。</li>
-              <li><b>予言</b>はいつでも変えられる。あなたの土地は流され続ける。</li>
-              <li><b>発明</b>は取り消せない。あなたの土地はその種類で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
+              <li>あなたは<b>市民</b>として、世界の<b>土地</b>のひとつに住んでいます。</li>
+              <li>土地は<b>都市・自然・荒野</b>の3種類があり、周りに影響を受けて変化します。</li>
+              <li>あなたは、終了時に最も多い土地を予測します。<b>早く言い当てるほど高得点</b>。</li>
+              <li><b>予言</b>：何度でも変えられる。あなたの土地は流され続ける。</li>
+              <li><b>発明</b>：取り消せない。あなたは土地をその種類で<b>固定</b>し、その未来に向かい続ける。</li>
             </ol>
             <div class="url muted" id="url"></div>
           </div>
@@ -132,14 +131,14 @@
       <div class="bars" id="bars"></div>
     </div>
     <div>
-      <div class="label">立ち止まった発明者</div>
+      <div class="label">発明者</div>
       <div class="big" id="inventors" style="font-size:40px">0</div>
     </div>
     <div class="legend" id="legend"></div>
     </div>
 
     <div id="rankingBox" class="hidden">
-      <div class="label">ランキング（全<span id="rankCount">0</span>人・スクロールで全員）</div>
+      <div class="label">ランキング（全<span id="rankCount">0</span>人）</div>
       <div class="rank" id="ranking"></div>
     </div>
 
