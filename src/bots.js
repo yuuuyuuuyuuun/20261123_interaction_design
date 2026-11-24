@@ -14,6 +14,11 @@ const BOT_TYPES = {
   },
   follow: { label: '追従予言', short: '追従', desc: '多数派を予言し、多数派が入れ替わるたびに乗り換える' },
   whim: { label: '気まぐれ予言', short: '気分', desc: '好きな色を予言し、ときどき気が変わる' },
+  mixed: {
+    label: '予言→発明',
+    short: '混成',
+    desc: '勝ちそうな色がはっきりしていれば最初から発明し、そうでなければ予言する。乗り換えるときは発明で乗り換える',
+  },
   inventEarly: { label: '早期発明', short: '早発', desc: '開始直後に、勝ちそうな色を発明する' },
   local: { label: '地元発明', short: '地元', desc: '自分の周りに仲間が3人以上いる色を、その場で発明する' },
   inventLate: { label: '機を見て発明', short: '機発', desc: '何も宣言せずに様子を見て、途中で勝ちそうな色を発明する' },
@@ -30,6 +35,16 @@ function argmax(a) {
   return b;
 }
 
+/** the most promising color; when the board says nothing yet, the color around me */
+function choose(p, local, own) {
+  const max = Math.max(...p);
+  const close = [...p.keys()].filter((c) => p[c] >= max - 0.03);
+  if (close.length === 1 || !local) return argmax(p);
+  const nb = local.slice();
+  if (own !== undefined) nb[own]--;
+  return close.reduce((b, c) => (nb[c] > nb[b] ? c : b), close[0]);
+}
+
 function leaderOf(counts) {
   const max = Math.max(...counts);
   return counts.filter((v) => v === max).length > 1 ? -1 : counts.indexOf(max);
@@ -39,8 +54,11 @@ function leaderOf(counts) {
  * @param {string} type one of BOT_TYPES
  * @param {() => number} rng
  * @param {number} ticks updates per round
+ * @param {object} [opts] for the simulations: { wait } updates an inventor waits before
+ *                        inventing ('inventAt'), { margin } how much better a switch must look
  */
-function createBot(type, rng, ticks) {
+function createBot(type, rng, ticks, opts = {}) {
+  const margin = opts.margin ?? SWITCH_MARGIN;
   const reaction = 1 + Math.floor(rng() * 3); // 1..3 updates before the first move
   const patience = 1 + Math.floor(rng() * 2); // a reason to switch must last this long
   const midpoint = Math.floor(ticks * (0.2 + rng() * 0.4));
@@ -50,9 +68,10 @@ function createBot(type, rng, ticks) {
   let seen = -1;
   let seenSince = 0;
 
-  /** 期待値予言: compare "stay" (my points stay as they are) with "switch" (points restart now) */
-  function predictByValue(view, decl, api, p = winProbs(view)) {
-    if (!decl) return api.predict(argmax(p));
+  /** 期待値予言: compare "stay" (my points stay as they are) with "switch" (points restart now).
+   *  `switchBy` is how the switch is declared: api.predict, or api.invent for mixed players. */
+  function predictByValue(view, decl, api, p = winProbs(view), me = {}, switchBy = api.predict) {
+    if (!decl) return api.predict(choose(p, me.local, me.color));
     const stay = p[decl.color] * (ticks - decl.tick);
     let alt = -1;
     let altValue = 0;
@@ -62,10 +81,10 @@ function createBot(type, rng, ticks) {
         altValue = pc * view.remaining;
       }
     });
-    urge = alt >= 0 && altValue > stay * SWITCH_MARGIN ? urge + 1 : 0;
+    urge = alt >= 0 && altValue > stay * margin ? urge + 1 : 0;
     if (urge >= patience) {
       urge = 0;
-      api.predict(alt);
+      switchBy(alt);
     }
   }
 
@@ -93,7 +112,7 @@ function createBot(type, rng, ticks) {
       if (decl?.invented || t < reaction) return;
       switch (type) {
         case 'predict':
-          return predictByValue(view, decl, api);
+          return predictByValue(view, decl, api, undefined, me);
         case 'follow':
           return follow(view, decl, api);
         case 'whim':
@@ -102,7 +121,22 @@ function createBot(type, rng, ticks) {
           if (rng() < 0.03) api.predict(Math.floor(rng() * 3));
           return;
         case 'inventEarly':
-          return api.invent(argmax(winProbs(view)));
+          return api.invent(choose(winProbs(view), me.local, me.color));
+        // mixed: predict first; a switch is made by inventing (it restarts the points either way,
+        // so inventing costs nothing more and adds influence). With opts.clear, invent at once
+        // when the best color's chance is already at least that high.
+        case 'mixed': {
+          const p = winProbs(view);
+          const clear = 'clear' in opts ? opts.clear : 0.55;
+          if (!decl && clear !== undefined) {
+            const c = choose(p, me.local, me.color);
+            if (p[c] >= clear) return api.invent(c);
+          }
+          return predictByValue(view, decl, api, p, me, api.invent);
+        }
+        case 'inventAt': // simulations: wait `opts.wait` updates, declaring nothing, then invent
+          if (t >= (opts.wait ?? 0)) api.invent(choose(winProbs(view), me.local, me.color));
+          return;
         case 'local': {
           // own cell excluded: 3+ of the 8 neighbors share a color
           const nb = me.local.slice();

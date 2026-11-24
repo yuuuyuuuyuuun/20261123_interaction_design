@@ -16,7 +16,9 @@ function playGame(types, opts, seed, rounds = 5) {
       [order[i], order[j]] = [order[j], order[i]];
     }
     const w = new World(types.length, opts, (seed * 31 + r * 7919) >>> 0);
-    const bots = order.map((k) => createBot(types[k], rng, w.opts.ticks));
+    const bots = order.map((k) =>
+      typeof types[k] === 'string' ? createBot(types[k], rng, w.opts.ticks) : createBot(types[k].type, rng, w.opts.ticks, types[k].opts)
+    );
     while (!w.finished) {
       const view = observe(w);
       bots.forEach((b, p) => {
@@ -98,4 +100,31 @@ if (require.main === module) {
   console.log(`${games}ゲーム（30人・5ラウンド）、構成: ${mode === 'equal' ? '8種類を均等に' : 'ゲームごとにランダム'}`);
   report(tournament(DEFAULTS, { games, mode }));
 }
-module.exports = { tournament, report, playGame };
+/**
+ * Average rank of each kind of player in a fixed population.
+ * @param {Array<{key:string,type:string,opts?:object}>} roster one entry per player
+ */
+function rankBy(roster, opts, { games = 200, seed = 1 } = {}) {
+  const N = roster.length;
+  const stat = {};
+  for (let g = 0; g < games; g++) {
+    const totals = playGame(roster, opts, seed * 7919 + g);
+    const ranked = [...totals.keys()].sort((a, b) => totals[b] - totals[a]);
+    const rankOf = new Array(N);
+    for (let a = 0; a < N; ) {
+      let b = a;
+      while (b + 1 < N && totals[ranked[b + 1]] === totals[ranked[a]]) b++;
+      for (let k = a; k <= b; k++) rankOf[ranked[k]] = (a + b) / 2 + 1;
+      a = b + 1;
+    }
+    roster.forEach((r, i) => {
+      const s = (stat[r.key] ||= { n: 0, rank: 0, points: 0 });
+      s.n++;
+      s.rank += rankOf[i];
+      s.points += totals[i];
+    });
+  }
+  return Object.fromEntries(Object.entries(stat).map(([k, s]) => [k, { avgRank: s.rank / s.n, perRound: s.points / s.n / 5 }]));
+}
+
+module.exports = { tournament, report, playGame, rankBy };

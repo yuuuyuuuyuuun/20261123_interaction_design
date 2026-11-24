@@ -26,6 +26,7 @@ const DEFAULTS = {
   boardScale: 16, // board cells ≈ players × boardScale
   minCells: 96, // never smaller than this, so a small class still gets a lively world
   aspect: 4 / 3, // cols : rows
+  balancedStart: false, // start every round with the three colors in exactly equal numbers (the future is blank)
   noise: 0.006,
   imitate: 0.81,
   // conformity law
@@ -37,6 +38,7 @@ const DEFAULTS = {
   //           `selfVoice` the cell's own color always counts one voice. If nothing is
   //           voiced often enough, the cell keeps its color.
   hear: 0.77,
+  inventorVoice: 0, // an inventor's voice is always heard and counts this many votes (0 = like anyone else)
   need: 2,
   choose: 'even',
   selfVoice: true,
@@ -119,7 +121,13 @@ class World {
     const hill = (n) => n ** o.power / (n ** o.power + o.half ** o.power);
     for (let n = 0; n <= 8; n++)
       this.pullTable.push(n <= o.peak ? hill(n) : hill(o.peak) * (1 - ((1 - o.floor) * (n - o.peak)) / (8 - o.peak)));
-    this.color = Array.from({ length: this.size }, () => Math.floor(this.rng() * o.colors));
+    if (o.balancedStart) {
+      this.color = Array.from({ length: this.size }, (_, i) => i % o.colors);
+      for (let i = this.size - 1; i > 0; i--) {
+        const j = Math.floor(this.rng() * (i + 1));
+        [this.color[i], this.color[j]] = [this.color[j], this.color[i]];
+      }
+    } else this.color = Array.from({ length: this.size }, () => Math.floor(this.rng() * o.colors));
     this.fixed = new Array(this.size).fill(false);
 
     // players are scattered over the board
@@ -292,7 +300,11 @@ class World {
       const own = cur[i];
       cnt.fill(0);
       if (o.selfVoice) cnt[own]++;
-      for (let s = 0; s < 8; s++) if (this.rng() < o.hear) cnt[cur[nb[s]]]++;
+      for (let s = 0; s < 8; s++) {
+        const j = nb[s];
+        if (o.inventorVoice > 0 && this.fixed[j]) cnt[cur[j]] += o.inventorVoice;
+        else if (this.rng() < o.hear) cnt[cur[j]]++;
+      }
       let best = own;
       let bestN = o.selfVoice ? Math.max(o.need, cnt[own]) : cnt[own] >= o.need ? cnt[own] : o.need - 1;
       if (o.choose === 'even') {
