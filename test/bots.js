@@ -1,30 +1,29 @@
 'use strict';
-// 動作確認用: ボット参加者を接続する
-// usage: node test/bots.js [人数] [URL]
+// 負荷・通信テスト用: 本物のソケット接続でボット参加者をつなぐ。
+// 普段のテストやプレイでは、大画面の「ボット」設定を使ってください。
+// usage: node test/bots.js [人数] [URL] [種類=follow,wait,inventEarly,inventLate,contrarian]
 const { io } = require('socket.io-client');
+const { createBot, BOT_TYPES } = require('../src/bots');
 const N = Number(process.argv[2] || 20);
 const URL = process.argv[3] || 'http://localhost:3000';
+const TYPES = (process.argv[4] || Object.keys(BOT_TYPES).join(',')).split(',');
 
 for (let k = 0; k < N; k++) {
+  const type = TYPES[k % TYPES.length];
   const s = io(URL, { auth: { role: 'player' }, transports: ['websocket'] });
-  const style = k % 4; // 0,1: 予言（追従） 2: 早めに発明 3: 様子見してから発明
-  const wait = 3 + Math.floor(Math.random() * 20);
-  let decided = null;
+  let brain = null;
   let round = 0;
-  s.on('connect', () => s.emit('join', `bot${String(k + 1).padStart(2, '0')}`, () => {}));
+  s.on('connect', () => s.emit('join', `ext${String(k + 1).padStart(2, '0')}`, () => {}));
   s.on('state', (st) => {
-    if (st.round !== round) { round = st.round; decided = null; }
-    if (st.phase !== 'playing' || !st.me || st.me.cell === null) return;
-    if (st.me.decl && st.me.decl.invented) return;
-    const elapsed = st.ticks - st.remaining;
-    const c = st.world.counts;
-    const leader = c.indexOf(Math.max(...c));
-    if (style <= 1) {
-      if (elapsed >= wait % 8 && decided !== leader) { decided = leader; s.emit('predict', leader); }
-    } else if (style === 2) {
-      if (elapsed >= 1) s.emit('invent', st.world.color[st.me.cell]);
-    } else if (elapsed >= wait) s.emit('invent', leader);
-    else if (decided !== leader) { decided = leader; s.emit('predict', leader); }
+    if (st.round !== round) {
+      round = st.round;
+      brain = createBot(type, Math.random, st.ticks);
+    }
+    if (st.phase !== 'playing' || !brain || !st.me || st.me.cell === null) return;
+    brain.act({ tick: st.world.tick, counts: st.world.counts }, { decl: st.me.decl }, {
+      predict: (c) => s.emit('predict', c),
+      invent: (c) => s.emit('invent', c),
+    });
   });
 }
-console.log(`${N} bots connecting to ${URL}`);
+console.log(`${N} socket bots connecting to ${URL}`);

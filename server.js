@@ -7,11 +7,13 @@ const express = require('express');
 const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 const { World } = require('./src/engine');
+const { BOT_TYPES, createBot } = require('./src/bots');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST_KEY = process.env.HOST_KEY || crypto.randomBytes(3).toString('hex');
 const TICK_MS = Number(process.env.TICK_MS || 1000);
 const OBSERVE_MS = Number(process.env.OBSERVE_MS || 5000);
+const MAX_BOTS = 200;
 
 const app = express();
 const server = http.createServer(app);
@@ -33,71 +35,102 @@ const game = {
   round: 0,
   rounds: 5,
   ticks: 60,
+  bots: Object.fromEntries(Object.keys(BOT_TYPES).map((k) => [k, 0])),
   world: null,
-  cellOwner: [], // cell index -> player id
-  timeline: [], // per round summary
+  order: [], // player index in the world -> player id
+  botBrains: [], // player index -> bot instance (or null for humans)
+  timeline: [],
   lastResult: null,
   timer: null,
   observeEndsAt: 0,
 };
 
-/** @type {Map<string, {id:string,name:string,total:number,sockets:Set<string>,cell:number|null}>} */
+/** @type {Map<string, {id:string,name:string,total:number,sockets:Set<string>,bot:string|null}>} */
 const players = new Map();
 
-function connected(p) {
-  return p.sockets.size > 0;
-}
+const isIn = (p) => Boolean(p.bot) || p.sockets.size > 0;
 
 function playerList() {
   return [...players.values()].map((p) => ({
     id: p.id,
     name: p.name,
     total: p.total,
-    online: connected(p),
-    cell: p.cell,
+    online: isIn(p),
+    bot: p.bot,
   }));
 }
 
-function ranking() {
-  return playerList().sort((a, b) => b.total - a.total);
+const ranking = () => playerList().sort((a, b) => b.total - a.total);
+
+// keep the bot players in line with game.bots
+function syncBots() {
+  for (const [type, want] of Object.entries(game.bots)) {
+    const mine = [...players.values()].filter((p) => p.bot === type);
+    for (let k = mine.length; k < want; k++) {
+      const id = `bot-${type}-${crypto.randomUUID().slice(0, 8)}`;
+      players.set(id, { id, name: '', total: 0, sockets: new Set(), bot: type });
+    }
+    for (const p of mine.slice(want)) players.delete(p.id);
+    [...players.values()]
+      .filter((p) => p.bot === type)
+      .forEach((p, k) => (p.name = `${BOT_TYPES[type].short}${k + 1}`));
+  }
+}
+
+function indexOf(p) {
+  return game.world ? game.order.indexOf(p.id) : -1;
 }
 
 function worldView() {
   const w = game.world;
   if (!w) return null;
+  const s = w.snapshot();
   return {
-    ...w.snapshot(),
-    names: game.cellOwner.map((id) => players.get(id)?.name ?? ''),
+    cols: s.cols,
+    rows: s.rows,
+    color: s.color,
+    fixedCells: s.fixed.reduce((a, f, i) => (f && a.push(i), a), []),
+    playerCell: s.playerCell,
+    names: game.order.map((id) => players.get(id)?.name ?? ''),
+    counts: s.counts,
+    tick: s.tick,
+    ticks: s.ticks,
+    events: s.events,
   };
 }
 
 function publicState() {
+  const w = game.world;
   return {
     phase: game.phase,
     round: game.round,
     rounds: game.rounds,
     ticks: game.ticks,
-    remaining: game.world ? game.world.remaining : game.ticks,
+    bots: game.bots,
+    botTypes: BOT_TYPES,
+    remaining: w ? w.remaining : game.ticks,
     observeLeft: game.phase === 'observe' ? Math.max(0, game.observeEndsAt - Date.now()) : 0,
     world: worldView(),
-    inventors: game.world ? game.world.fixed.filter(Boolean).length : 0,
+    inventors: w ? w.decl.filter((d) => d?.invented).length : 0,
     timeline: game.timeline,
     lastResult: game.lastResult,
-    playerCount: [...players.values()].filter(connected).length,
+    playerCount: [...players.values()].filter(isIn).length,
+    humanCount: [...players.values()].filter((p) => !p.bot && isIn(p)).length,
   };
 }
 
 function personalState(p) {
   const w = game.world;
-  const cell = p.cell;
-  const inWorld = w && cell !== null && cell !== undefined && game.cellOwner[cell] === p.id;
+  const idx = indexOf(p);
+  const rank = ranking().findIndex((r) => r.id === p.id) + 1;
   return {
     id: p.id,
     name: p.name,
     total: p.total,
-    cell: inWorld ? cell : null,
-    decl: inWorld ? w.decl[cell] : null,
-    rank: ranking().findIndex((r) => r.id === p.id) + 1,
+    index: idx >= 0 ? idx : null,
+    cell: idx >= 0 ? w.playerCell[idx] : null,
+    decl: idx >= 0 ? w.decl[idx] : null,
+    rank,
   };
 }
 
@@ -119,14 +152,23 @@ function shuffle(a) {
   return a;
 }
 
-function startRound() {
+function stopTimers() {
+  clearTimeout(game.timer);
   clearInterval(game.timer);
-  const ids = shuffle([...players.values()].filter(connected).map((p) => p.id));
+  game.timer = null;
+}
+
+function startRound() {
+  stopTimers();
+  syncBots();
+  const ids = shuffle([...players.values()].filter(isIn).map((p) => p.id));
   if (ids.length === 0) return;
-  for (const p of players.values()) p.cell = null;
-  ids.forEach((id, i) => (players.get(id).cell = i));
-  game.cellOwner = ids;
+  game.order = ids;
   game.world = new World(ids.length, { ticks: game.ticks }, (Math.random() * 2 ** 32) >>> 0);
+  game.botBrains = ids.map((id) => {
+    const p = players.get(id);
+    return p.bot ? createBot(p.bot, Math.random, game.ticks) : null;
+  });
   game.round += 1;
   game.lastResult = null;
   game.phase = 'observe';
@@ -141,32 +183,42 @@ function startRound() {
 
 function tick() {
   const w = game.world;
+  const view = { tick: w.tick, counts: w.counts() };
+  game.botBrains.forEach((b, i) => {
+    if (!b) return;
+    b.act(view, { decl: w.decl[i] }, { predict: (c) => w.predict(i, c), invent: (c) => w.invent(i, c) });
+  });
   w.step();
   if (w.finished) return endRound();
   broadcast();
 }
 
 function endRound() {
-  clearInterval(game.timer);
+  stopTimers();
   const w = game.world;
   const res = w.result();
-  const inventors = [];
   const perPlayer = {};
-  game.cellOwner.forEach((id, cell) => {
+  let inventors = 0;
+  let inventorsOfFuture = 0;
+  game.order.forEach((id, i) => {
     const p = players.get(id);
-    const d = w.decl[cell];
-    const pts = res.scores[cell];
+    const d = w.decl[i];
+    const pts = res.scores[i];
     if (p) p.total += pts;
     perPlayer[id] = { decl: d, points: pts };
-    if (d && d.invented) inventors.push({ color: d.color, ok: d.color === res.future });
+    if (d?.invented) {
+      inventors++;
+      if (d.color === res.future) inventorsOfFuture++;
+    }
   });
   const summary = {
     round: game.round,
     future: res.future,
     counts: res.counts,
-    size: w.n,
-    inventors: inventors.length,
-    inventorsOfFuture: inventors.filter((x) => x.ok).length,
+    size: w.size,
+    players: w.players,
+    inventors,
+    inventorsOfFuture,
     history: w.history,
   };
   game.timeline.push(summary);
@@ -176,26 +228,20 @@ function endRound() {
 }
 
 function resetGame() {
-  clearInterval(game.timer);
-  clearTimeout(game.timer);
+  stopTimers();
   game.phase = 'lobby';
   game.round = 0;
   game.world = null;
-  game.cellOwner = [];
+  game.order = [];
+  game.botBrains = [];
   game.timeline = [];
   game.lastResult = null;
-  for (const p of players.values()) {
-    p.total = 0;
-    p.cell = null;
-  }
-  // forget players who left
-  for (const [id, p] of players) if (!connected(p)) players.delete(id);
+  for (const [id, p] of players) if (!isIn(p)) players.delete(id);
+  for (const p of players.values()) p.total = 0;
   broadcast();
 }
 
 // ---------------------------------------------------------------- sockets
-
-const COLOR_OK = (c) => Number.isInteger(c) && c >= 0 && c < 3;
 
 io.on('connection', (socket) => {
   const { role, key, token } = socket.handshake.auth || {};
@@ -211,31 +257,37 @@ io.on('connection', (socket) => {
     socket.on('host:start', () => {
       if (game.phase === 'lobby' || game.phase === 'result') startRound();
     });
-    socket.on('host:settings', ({ rounds, ticks } = {}) => {
-      if (game.phase !== 'lobby') return;
-      if (Number.isInteger(rounds) && rounds >= 1 && rounds <= 20) game.rounds = rounds;
+    socket.on('host:settings', ({ rounds, ticks, bots } = {}) => {
+      if (game.phase !== 'lobby' && game.phase !== 'result') return;
+      if (Number.isInteger(rounds) && rounds >= Math.max(1, game.round + (game.phase === 'result' ? 1 : 0)) && rounds <= 20)
+        game.rounds = rounds;
       if (Number.isInteger(ticks) && ticks >= 10 && ticks <= 300) game.ticks = ticks;
+      if (bots && typeof bots === 'object') {
+        let total = 0;
+        for (const type of Object.keys(BOT_TYPES)) {
+          const n = Number(bots[type]);
+          if (Number.isInteger(n) && n >= 0) game.bots[type] = n;
+          total += game.bots[type];
+        }
+        if (total > MAX_BOTS) for (const type of Object.keys(BOT_TYPES)) game.bots[type] = Math.floor((game.bots[type] * MAX_BOTS) / total);
+        syncBots();
+      }
       broadcast();
     });
     socket.on('host:reset', resetGame);
-    socket.on('host:kick', (id) => {
-      const p = players.get(id);
-      if (!p || game.phase === 'observe' || game.phase === 'playing') return;
-      for (const sid of p.sockets) io.sockets.sockets.get(sid)?.disconnect(true);
-      players.delete(id);
-      broadcast();
-    });
     return;
   }
 
   // ---- player
   let p = typeof token === 'string' && players.get(token);
+  if (p?.bot) p = null;
+
   socket.on('join', (rawName, ack) => {
     const name = String(rawName || '').trim().slice(0, 12);
     if (!name) return ack?.({ ok: false, error: '名前を入力してください' });
     if (!p) {
       const id = crypto.randomUUID();
-      p = { id, name, total: 0, sockets: new Set(), cell: null };
+      p = { id, name, total: 0, sockets: new Set(), bot: null };
       players.set(id, p);
     } else p.name = name;
     p.sockets.add(socket.id);
@@ -250,15 +302,15 @@ io.on('connection', (socket) => {
   } else socket.emit('state', publicState());
 
   const act = (fn) => (color, ack) => {
-    if (!p || game.phase !== 'playing' || !COLOR_OK(color)) return ack?.({ ok: false });
-    const cell = p.cell;
-    if (cell === null || game.cellOwner[cell] !== p.id) return ack?.({ ok: false });
-    const ok = fn(cell, color);
+    if (!p || game.phase !== 'playing') return ack?.({ ok: false });
+    const i = indexOf(p);
+    if (i < 0) return ack?.({ ok: false });
+    const ok = fn(i, color);
     ack?.({ ok });
     if (ok) broadcast();
   };
-  socket.on('predict', act((cell, c) => game.world.predict(cell, c)));
-  socket.on('invent', act((cell, c) => game.world.invent(cell, c)));
+  socket.on('predict', act((i, c) => game.world.predict(i, c)));
+  socket.on('invent', act((i, c) => game.world.invent(i, c)));
 
   socket.on('disconnect', () => {
     if (!p) return;

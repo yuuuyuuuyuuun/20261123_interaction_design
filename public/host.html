@@ -8,38 +8,44 @@
 <style>
   body { overflow: hidden; }
   .app { display: grid; grid-template-columns: 1fr 380px; height: 100vh; }
-  main { position: relative; padding: 28px; display: flex; flex-direction: column; min-width: 0; }
-  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 28px 26px; display: flex; flex-direction: column; gap: 22px; overflow-y: auto; }
+  main { position: relative; padding: 24px 28px; display: flex; flex-direction: column; min-width: 0; gap: 12px; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 24px 24px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
   h1 { font-size: 22px; margin: 0; letter-spacing: .04em; }
   .stage { flex: 1; position: relative; min-height: 0; }
   #world { position: absolute; inset: 0; width: 100%; height: 100%; }
   .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 18px; }
   .overlay.dim { background: rgba(11,13,20,.82); backdrop-filter: blur(6px); }
+  .toast { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); padding: 8px 18px; border-radius: 999px; background: rgba(11,13,20,.85); border: 1px solid var(--line); font-weight: 800; font-size: 20px; transition: opacity .4s; pointer-events: none; }
 
   /* lobby */
   .lobby { display: grid; grid-template-columns: auto 1fr; gap: 48px; align-items: center; max-width: 1100px; text-align: left; }
-  .qr { background: #fff; padding: 14px; border-radius: 18px; width: min(34vh, 360px); aspect-ratio: 1; }
+  .qr { background: #fff; padding: 14px; border-radius: 18px; width: min(34vh, 340px); aspect-ratio: 1; }
   .qr img { width: 100%; height: 100%; display: block; }
-  .title { font-size: clamp(32px, 4.4vw, 64px); font-weight: 800; line-height: 1.15; margin: 0 0 18px; letter-spacing: .02em; }
-  .rules { font-size: 19px; line-height: 1.75; margin: 0; padding-left: 1.2em; }
+  .title { font-size: clamp(32px, 4.4vw, 60px); font-weight: 800; line-height: 1.15; margin: 0 0 18px; letter-spacing: .02em; }
+  .rules { font-size: 18px; line-height: 1.7; margin: 0; padding-left: 1.2em; }
   .rules b { color: #fff; }
   .url { font-size: 20px; margin-top: 14px; word-break: break-all; }
 
   /* side */
   .label { font-size: 13px; letter-spacing: .12em; color: var(--muted); margin-bottom: 6px; }
-  .big { font-size: 64px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-  .year { font-size: 28px; font-weight: 700; }
+  .big { font-size: 60px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .year { font-size: 26px; font-weight: 700; }
   .bars { display: flex; flex-direction: column; gap: 10px; }
-  .bar { display: grid; grid-template-columns: 28px 1fr 44px; align-items: center; gap: 10px; font-weight: 700; }
+  .bar { display: grid; grid-template-columns: 28px 1fr 48px; align-items: center; gap: 10px; font-weight: 700; }
   .track { height: 16px; background: #0d1018; border-radius: 99px; overflow: hidden; }
-  .fill { height: 100%; border-radius: 99px; transition: width .45s ease; }
+  .fill { height: 100%; border-radius: 99px; transition: width .35s ease; }
   .count { text-align: right; font-variant-numeric: tabular-nums; }
-  .legend { font-size: 14px; line-height: 1.7; color: var(--muted); }
-  .legend .sw { display: inline-block; width: 16px; height: 16px; border-radius: 4px; vertical-align: -3px; margin-right: 6px; }
-  .legend .inv { box-shadow: 0 0 10px #fff; outline: 2px solid #fff; outline-offset: -5px; background: var(--red); }
+  .legend { font-size: 13px; line-height: 1.8; color: var(--muted); }
+  .legend .sw { display: inline-block; width: 16px; height: 16px; border-radius: 4px; vertical-align: -3px; margin-right: 6px; background: var(--blue); position: relative; }
+  .legend .sw.p::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: rgba(10,12,20,.7); }
+  .legend .sw.inv { box-shadow: 0 0 10px var(--red); outline: 2px solid #fff; outline-offset: -4px; background: var(--red); }
+  .legend .sw.mv { background: transparent; border: 3px solid var(--yellow); border-radius: 50%; }
   .controls { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
-  .settings { display: flex; gap: 10px; font-size: 14px; color: var(--muted); align-items: center; flex-wrap: wrap; }
-  .settings input { width: 64px; padding: 6px 8px; border-radius: 8px; background: #0d1018; color: var(--text); border: 1px solid var(--line); font: inherit; }
+  .settings { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; font-size: 14px; align-items: center; }
+  .settings .sec { grid-column: 1 / -1; font-size: 12px; letter-spacing: .12em; color: var(--muted); margin-top: 6px; }
+  .settings label { color: var(--text); }
+  .settings small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
+  .settings input { width: 72px; padding: 6px 8px; border-radius: 8px; background: #0d1018; color: var(--text); border: 1px solid var(--line); font: inherit; text-align: right; }
   .players { display: flex; flex-wrap: wrap; gap: 6px; font-size: 14px; }
   .players .off { opacity: .4; }
 
@@ -47,7 +53,7 @@
   .future { font-size: clamp(48px, 8vw, 120px); font-weight: 900; letter-spacing: .04em; }
   .sub { font-size: 24px; }
   #hist { width: min(720px, 80%); height: 150px; }
-  .rank { font-size: 18px; display: grid; grid-template-columns: 2em 1fr auto; gap: 6px 14px; }
+  .rank { font-size: 17px; display: grid; grid-template-columns: 2em 1fr auto; gap: 4px 14px; }
   .rank .pts { font-variant-numeric: tabular-nums; font-weight: 700; }
   .timeline { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
   .era { width: 150px; padding: 14px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
@@ -65,6 +71,7 @@
     <h1>世界は、わたしたちでできている</h1>
     <div class="stage">
       <canvas id="world"></canvas>
+      <div class="toast" id="toast" style="opacity:0"></div>
 
       <div id="lobby" class="overlay">
         <div class="lobby">
@@ -72,8 +79,9 @@
           <div>
             <p class="title">予言するか。<br>発明するか。</p>
             <ol class="rules">
-              <li>あなたは世界の<b>1マス</b>です。マスは時々、<b>隣の誰かの色を真似</b>ます。</li>
-              <li>終了時に<b>最も多い色</b>が「未来」です。それを<b>早く言い当てるほど高得点</b>。</li>
+              <li>あなたは世界の<b>1マス</b>。世界には、発明しない<b>群衆</b>もいます。</li>
+              <li>マスは時々<b>近くの3人を見て多い色に合わせ</b>、たまに<b>気まぐれ</b>に色を変え、ときどき大きな<b>ムーブメント</b>に飲み込まれます。</li>
+              <li>終了時に<b>最も多い色</b>が「未来」。<b>早く言い当てるほど高得点</b>。</li>
               <li><b>予言</b>はいつでも変えられる。あなたは流され続ける。</li>
               <li><b>発明</b>は取り消せない。あなたはその色で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
             </ol>
@@ -103,7 +111,8 @@
   </main>
 
   <aside>
-    <div id="sideGame">
+    <div id="live" style="display:contents">
+    <div>
       <div class="label">ラウンド</div>
       <div class="year" id="roundLabel">—</div>
     </div>
@@ -117,11 +126,14 @@
     </div>
     <div>
       <div class="label">立ち止まった発明者</div>
-      <div class="big" id="inventors" style="font-size:44px">0</div>
+      <div class="big" id="inventors" style="font-size:40px">0</div>
     </div>
     <div class="legend">
-      <div><span class="sw" style="background:var(--blue)"></span>流されているマス（予言者・未宣言）</div>
-      <div><span class="sw inv"></span>発明者のマス（もう色が変わらない）</div>
+      <div><span class="sw"></span>群衆（発明しない人々）</div>
+      <div><span class="sw p"></span>プレイヤー（予言者・未宣言）</div>
+      <div><span class="sw inv"></span>発明者（もう色が変わらない）</div>
+      <div><span class="sw mv"></span>ムーブメント（一帯が一色に）</div>
+    </div>
     </div>
 
     <div id="rankingBox" class="hidden">
@@ -136,10 +148,13 @@
 
     <div class="controls">
       <div class="settings" id="settings">
-        ラウンド数 <input id="setRounds" type="number" min="1" max="20" value="5">
-        秒数 <input id="setTicks" type="number" min="10" max="300" value="60">
+        <div class="sec">ゲーム</div>
+        <label for="setRounds">ラウンド数</label><input id="setRounds" type="number" min="1" max="20" value="5">
+        <label for="setTicks">1ラウンドのターン数（1ターン≒1秒）</label><input id="setTicks" type="number" min="10" max="300" value="60">
+        <div class="sec">ボット</div>
+        <div id="botSettings" style="display:contents"></div>
       </div>
-      <button class="btn" id="startBtn">ラウンド開始</button>
+      <button class="btn" id="startBtn">ゲーム開始</button>
       <button class="btn ghost" id="resetBtn">最初からやり直す</button>
     </div>
   </aside>

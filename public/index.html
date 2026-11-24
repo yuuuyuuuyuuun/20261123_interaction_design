@@ -26,14 +26,15 @@
   .me { text-align: center; font-size: 15px; min-height: 1.6em; }
 
   .choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .choice { padding: 18px 0; border-radius: 14px; font-size: 22px; font-weight: 800; color: #0b0d14; position: relative; transition: transform .1s, box-shadow .2s; }
+  .choice { padding: 14px 0; border-radius: 14px; font-size: 22px; font-weight: 800; color: #0b0d14; position: relative; transition: transform .1s, box-shadow .2s; }
   .choice:active { transform: scale(.97); }
   .choice.on { box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px #fff; }
   .choice small { display: block; font-size: 12px; font-weight: 700; opacity: .75; }
+  .choice.inv { background: transparent !important; color: var(--text); border: 3px solid currentColor; box-shadow: inset 0 0 18px -6px currentColor; }
+  .rowlbl { font-size: 13px; font-weight: 700; margin: 10px 0 6px; }
+  .rowlbl .muted { font-weight: 400; }
+  #controls { display: flex; flex-direction: column; }
 
-  .invent { width: 100%; position: relative; overflow: hidden; padding: 20px; border-radius: 16px; font-size: 18px; font-weight: 800; background: transparent; border: 2px solid #fff; touch-action: none; }
-  .invent .prog { position: absolute; inset: 0; background: #fff; transform-origin: left; transform: scaleX(0); }
-  .invent span { position: relative; mix-blend-mode: difference; }
   .hint { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.6; text-wrap: balance; }
   .fixed { border-radius: 16px; padding: 18px; text-align: center; font-weight: 700; line-height: 1.6; border: 2px solid #fff; box-shadow: 0 0 24px rgba(255,255,255,.25); }
 
@@ -65,10 +66,11 @@
     <p class="muted" id="waitText">大画面でゲームが始まるのを待っています。</p>
     <div class="card">
       <ol class="rules">
-        <li>あなたは世界の<b>1マス</b>。マスは時々、<b>隣の誰かの色を真似</b>ます。</li>
+        <li>あなたは世界の<b>1マス</b>。世界には発明しない<b>群衆</b>もいます。</li>
+        <li>マスは時々<b>近くの3人を見て多い色に合わせ</b>、たまに<b>気まぐれ</b>に変わり、ときどき<b>ムーブメント</b>に飲み込まれます。</li>
         <li>終了時に<b>最も多い色</b>が「未来」。早く言い当てるほど高得点。</li>
-        <li><b>予言</b>：色をタップ。何度でも変えられる。あなたは流され続ける。</li>
-        <li><b>発明</b>：長押し。取り消せない。あなたはその色で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
+        <li><b>予言</b>：何度でも変えられる。あなたは流され続ける。</li>
+        <li><b>発明</b>：取り消せない。あなたはその色で<b>立ち止まり</b>、周りに影響を与え続ける。</li>
       </ol>
     </div>
   </section>
@@ -89,10 +91,10 @@
     <div class="me" id="meLine"></div>
 
     <div id="controls">
-      <div class="choices" id="choices"></div>
-      <div style="height:12px"></div>
-      <button class="invent" id="inventBtn"><div class="prog" id="prog"></div><span id="inventLbl">長押しで発明する</span></button>
-      <div class="hint" id="hint">まず色をタップして予言してください。</div>
+      <div class="rowlbl">予言する <span class="muted">— 何度でも変えられる</span></div>
+      <div class="choices" id="predictRow"></div>
+      <div class="rowlbl">発明する <span class="muted">— 取り消せない。その色で立ち止まる</span></div>
+      <div class="choices" id="inventRow"></div>
     </div>
     <div class="fixed hidden" id="fixedBox"></div>
     <div class="hint hidden" id="spectate">このラウンドの途中から参加しました。次のラウンドから世界に入ります。</div>

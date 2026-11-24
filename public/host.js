@@ -10,6 +10,7 @@ $('qr').src = '/qr.svg?u=' + encodeURIComponent(joinUrl);
 $('url').textContent = joinUrl;
 
 let state = null;
+let botInputsBuilt = false;
 
 socket.on('denied', () => $('denied').classList.remove('hidden'));
 socket.on('state', (s) => {
@@ -17,15 +18,31 @@ socket.on('state', (s) => {
   render();
 });
 
-$('startBtn').onclick = () => {
-  if (state?.phase === 'lobby') {
-    socket.emit('host:settings', {
-      rounds: Number($('setRounds').value),
-      ticks: Number($('setTicks').value),
-    });
-  }
-  socket.emit('host:start');
-};
+// ---- settings: sent as soon as they change
+function sendSettings() {
+  const bots = {};
+  document.querySelectorAll('[data-bot]').forEach((el) => (bots[el.dataset.bot] = Math.max(0, Number(el.value) || 0)));
+  socket.emit('host:settings', {
+    rounds: Number($('setRounds').value),
+    ticks: Number($('setTicks').value),
+    bots,
+  });
+}
+$('setRounds').addEventListener('change', sendSettings);
+$('setTicks').addEventListener('change', sendSettings);
+
+function buildBotInputs(types, counts) {
+  $('botSettings').innerHTML = Object.entries(types)
+    .map(
+      ([k, t]) => `<label for="bot-${k}">${esc(t.label)}<small>${esc(t.desc)}</small></label>
+      <input id="bot-${k}" data-bot="${k}" type="number" min="0" max="200" value="${counts[k] || 0}">`
+    )
+    .join('');
+  document.querySelectorAll('[data-bot]').forEach((el) => el.addEventListener('change', sendSettings));
+  botInputsBuilt = true;
+}
+
+$('startBtn').onclick = () => socket.emit('host:start');
 $('resetBtn').onclick = () => {
   if (confirm('得点と年表を消して、最初からやり直しますか？')) socket.emit('host:reset');
 };
@@ -35,19 +52,44 @@ function show(id, on) {
 }
 
 let observeTimer = null;
+let toastTimer = null;
+let lastEventTick = -1;
+
+function toast(text, color) {
+  const t = $('toast');
+  t.textContent = text;
+  t.style.color = color;
+  t.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.style.opacity = 0), 1600);
+}
 
 function render() {
   const s = state;
   const ph = s.phase;
+  const editable = ph === 'lobby' || ph === 'result';
 
   show('lobby', ph === 'lobby');
   show('observe', ph === 'observe');
   show('result', ph === 'result');
   show('final', ph === 'final');
-  show('settings', ph === 'lobby');
+  show('settings', editable);
+  show('live', ph !== 'lobby');
   show('rankingBox', ph === 'result' || ph === 'final');
 
+  if (!botInputsBuilt) buildBotInputs(s.botTypes, s.bots);
+  // reflect the server's values unless the operator is typing in that field
+  const sync = (el, v) => document.activeElement !== el && (el.value = v);
+  sync($('setRounds'), s.rounds);
+  sync($('setTicks'), s.ticks);
+  document.querySelectorAll('[data-bot]').forEach((el) => sync(el, s.bots[el.dataset.bot] ?? 0));
+
   view.set(ph === 'lobby' ? null : s.world);
+  if (ph === 'playing' && s.world?.events?.length && s.world.tick !== lastEventTick) {
+    lastEventTick = s.world.tick;
+    const c = COLORS[s.world.events[0].color];
+    toast(`ムーブメント：${c.name}`, c.hex);
+  }
 
   $('roundLabel').textContent = s.round ? `${yearOf(s.round)}年代（${s.round}/${s.rounds}）` : `全${s.rounds}ラウンド`;
   $('remaining').textContent = ph === 'playing' ? s.remaining : ph === 'observe' ? s.ticks : '—';
@@ -61,18 +103,19 @@ function render() {
       <span class="count">${counts[i]}</span></div>`
   ).join('');
 
-  $('pcount').textContent = s.playerCount;
-  $('players').innerHTML = s.players
-    .map((p) => `<span class="chip ${p.online ? '' : 'off'}">${esc(p.name)}</span>`)
-    .join('');
+  const humans = s.players.filter((p) => !p.bot);
+  const bots = s.players.length - humans.length;
+  $('pcount').textContent = `${s.humanCount}${bots ? ` ＋ボット${bots}` : ''}`;
+  $('players').innerHTML = humans.map((p) => `<span class="chip ${p.online ? '' : 'off'}">${esc(p.name)}</span>`).join('');
   $('ranking').innerHTML = s.players
     .slice(0, 10)
     .map((p, i) => `<span class="muted">${i + 1}</span><span>${esc(p.name)}</span><span class="pts">${p.total}</span>`)
     .join('');
 
   const btn = $('startBtn');
-  btn.disabled = !(ph === 'lobby' || ph === 'result') || s.playerCount === 0;
-  btn.textContent = ph === 'lobby' ? 'ゲーム開始' : ph === 'result' ? `次のラウンド（${yearOf(s.round + 1)}年代）へ` : ph === 'final' ? '終了' : '進行中…';
+  btn.disabled = !editable || s.playerCount === 0;
+  btn.textContent =
+    ph === 'lobby' ? 'ゲーム開始' : ph === 'result' ? `次のラウンド（${yearOf(s.round + 1)}年代）へ` : ph === 'final' ? '終了' : '進行中…';
 
   clearInterval(observeTimer);
   if (ph === 'observe') {

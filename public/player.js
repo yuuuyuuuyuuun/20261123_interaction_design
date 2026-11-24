@@ -15,7 +15,7 @@ const store = {
 let token = store.get(TOKEN_KEY);
 let joined = false;
 let state = null;
-let selected = null; // color currently predicted (for the invent button)
+let selected = null; // color currently predicted
 
 const socket = io({ auth: { role: 'player', token } });
 const view = new WorldView($('world'));
@@ -51,47 +51,25 @@ function join(name) {
 $('joinBtn').onclick = () => join($('nameInput').value.trim());
 $('nameInput').addEventListener('keydown', (e) => e.key === 'Enter' && $('joinBtn').click());
 
-// ---- choices
-$('choices').innerHTML = COLORS.map(
-  (c, i) => `<button class="choice" data-c="${i}" style="background:${c.hex}">${c.name}<small>予言する</small></button>`
+// ---- choices: one tap each
+$('predictRow').innerHTML = COLORS.map(
+  (c, i) => `<button class="choice" data-act="predict" data-c="${i}" style="background:${c.hex}">${c.name}</button>`
 ).join('');
-$('choices').addEventListener('click', (e) => {
+$('inventRow').innerHTML = COLORS.map(
+  (c, i) => `<button class="choice inv" data-act="invent" data-c="${i}" style="color:${c.hex}">${c.name}</button>`
+).join('');
+$('controls').addEventListener('click', (e) => {
   const b = e.target.closest('.choice');
   if (!b || b.disabled) return;
   const c = Number(b.dataset.c);
-  socket.emit('predict', c, (r) => r?.ok && navigator.vibrate?.(15));
-  selected = c;
-  render();
-});
-
-// ---- hold to invent
-const HOLD_MS = 1200;
-let holdStart = 0;
-let holdRaf = 0;
-function holdFrame() {
-  const k = Math.min(1, (performance.now() - holdStart) / HOLD_MS);
-  $('prog').style.transform = `scaleX(${k})`;
-  if (k >= 1) {
-    cancelHold();
-    socket.emit('invent', selected, (r) => r?.ok && navigator.vibrate?.([30, 60, 120]));
-    return;
+  const act = b.dataset.act;
+  socket.emit(act, c, (r) => r?.ok && navigator.vibrate?.(act === 'invent' ? [30, 50, 90] : 15));
+  if (act === 'predict') {
+    selected = c;
+    render();
   }
-  holdRaf = requestAnimationFrame(holdFrame);
-}
-function startHold(e) {
-  e.preventDefault();
-  if ($('inventBtn').disabled || selected === null) return;
-  holdStart = performance.now();
-  holdRaf = requestAnimationFrame(holdFrame);
-}
-function cancelHold() {
-  cancelAnimationFrame(holdRaf);
-  $('prog').style.transform = 'scaleX(0)';
-}
-const ib = $('inventBtn');
-ib.addEventListener('pointerdown', startHold);
-['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => ib.addEventListener(ev, cancelHold));
-ib.addEventListener('contextmenu', (e) => e.preventDefault());
+});
+$('controls').addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ---- render
 function screen(id) {
@@ -166,7 +144,7 @@ function renderPlay(s, me) {
   const decl = me.decl;
   if (decl) selected = decl.color;
   const myColor = s.world.color[me.cell];
-  $('meLine').innerHTML = `点線のマスがあなた（いま<b style="color:${COLORS[myColor].hex}">${COLORS[myColor].name}</b>）` +
+  $('meLine').innerHTML = `白い輪の中があなた（いま<b style="color:${COLORS[myColor].hex}">${COLORS[myColor].name}</b>）` +
     (decl && !decl.invented ? ` ・ 予言：<b style="color:${COLORS[decl.color].hex}">${COLORS[decl.color].name}</b>（当たれば +${s.ticks - decl.tick}）` : '');
 
   const invented = decl?.invented;
@@ -180,14 +158,6 @@ function renderPlay(s, me) {
 
   document.querySelectorAll('.choice').forEach((b) => {
     b.disabled = !playing;
-    b.classList.toggle('on', Number(b.dataset.c) === selected);
+    b.classList.toggle('on', b.dataset.act === 'predict' && Number(b.dataset.c) === selected);
   });
-  const canInvent = playing && selected !== null;
-  $('inventBtn').disabled = !canInvent;
-  $('inventLbl').textContent = selected === null ? '長押しで発明する' : `長押しで「${COLORS[selected].name}」を発明する`;
-  $('hint').textContent = !playing
-    ? '世界を観察してください。まもなく始まります。'
-    : selected === null
-      ? 'まず色をタップして予言してください。'
-      : '発明すると取り消せません。あなたはその色で立ち止まります。';
 }

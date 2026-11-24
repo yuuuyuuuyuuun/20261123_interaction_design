@@ -2,24 +2,34 @@
 
 // 世界は、わたしたちでできている — game engine (pure, no I/O)
 //
-// 世界   : participants, one cell each, laid out on a grid
-// 法則   : imitation — now and then, every free cell copies one of its neighbors (voter model)
+// 世界   : a large torus-shaped rectangle of cells. A few of them are the players;
+//          the rest are the crowd — people who never invent and always flow.
+// 法則   : every free cell, on every update,
+//            - 気まぐれ  (noise)    : with probability `noise`, takes a random color
+//            - 同調      (imitate)  : otherwise, with probability `imitate`, looks at `sample` random
+//                                     neighbors and takes their most common color (ties: random)
+//          and now and then the whole world is shaken by
+//            - 流行・災害 (movement) : a disc of free cells turns into one color at once
 // 未来   : the plurality color of the whole world when the round ends
-// 予言   : a declaration that may be changed at any time; the cell keeps flowing with the law
-// 発明   : a declaration that can never change; the cell is fixed to the declared color
-// 得点   : time remaining at the moment of the final declaration, if it was right
+// 予言   : a declaration that may be changed at any time; the player's cell keeps flowing
+// 発明   : a declaration that can never change; the player's cell is fixed to that color
+//          and is immune to every law above
+// 得点   : updates remaining at the moment of the final declaration, if it was right
 
+// Chosen by simulation (see sim/ and README): lively for the whole round, the early
+// leader wins only ~40%, one inventor alone barely moves the world, a whole class
+// inventing the same color together usually — but not always — gets its way.
 const DEFAULTS = {
   colors: 3,
-  neighborhood: 'moore', // 'moore' (8) | 'vn' (4)
-  torus: true,
-  law: 'voter', // 'voter' (imitation) | 'majority' (deterministic) | 'soft'
-  softBeta: 2, // for law 'soft': P(color) ∝ count^beta
-  ticks: 60, // world updates per round
-  // probability that a free cell looks at its neighbors on each update.
-  // 'auto' = N/100: keeps how much one person can move the world roughly constant
-  // regardless of class size (see sim/ — a lone inventor succeeds ~60-67% for N = 8..60)
-  rate: 'auto',
+  ticks: 60, // updates per round
+  boardScale: 16, // board cells ≈ players × boardScale
+  minCells: 96, // never smaller than this, so a small class still gets a lively world
+  aspect: 4 / 3, // cols : rows
+  imitate: 0.8,
+  sample: 3, // how many neighbors a cell looks at when it conforms (1 = plain imitation)
+  noise: 0.04,
+  movement: 0.12, // probability per update that a movement happens
+  movementRadius: [0.22, 0.45], // radius range, relative to the shorter side of the board
 };
 
 function makeRng(seed) {
@@ -34,57 +44,52 @@ function makeRng(seed) {
   };
 }
 
-function autoRate(n) {
-  return Math.min(1, Math.max(0.05, n / 100));
-}
-
-function gridSize(n) {
-  const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
-  const rows = Math.max(1, Math.ceil(n / cols));
+function boardSize(players, o) {
+  const target = Math.max(o.minCells, players * o.boardScale, players);
+  let cols = Math.max(3, Math.round(Math.sqrt(target * o.aspect)));
+  let rows = Math.max(3, Math.round(target / cols));
+  while (cols * rows < players) rows++;
   return { cols, rows };
 }
 
-function buildNeighbors(n, cols, rows, neighborhood, torus) {
-  const offsets =
-    neighborhood === 'vn'
-      ? [[0, -1], [-1, 0], [1, 0], [0, 1]]
-      : [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
-  const nb = [];
-  for (let i = 0; i < n; i++) {
-    const x = i % cols;
-    const y = Math.floor(i / cols);
-    const set = new Set();
-    for (const [dx, dy] of offsets) {
-      let nx = x + dx;
-      let ny = y + dy;
-      if (torus) {
-        nx = (nx + cols) % cols;
-        ny = (ny + rows) % rows;
-      } else if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-      const j = ny * cols + nx;
-      if (j !== i && j < n) set.add(j);
-    }
-    nb.push([...set]);
-  }
-  return nb;
-}
-
 class World {
-  constructor(n, opts = {}, seed = Date.now()) {
+  /**
+   * @param {number} players number of player cells
+   * @param {object} opts see DEFAULTS
+   * @param {number} seed
+   */
+  constructor(players, opts = {}, seed = Date.now()) {
     this.opts = { ...DEFAULTS, ...opts };
-    if (this.opts.rate === 'auto') this.opts.rate = autoRate(n);
-    this.n = n;
+    const o = this.opts;
     this.rng = makeRng(seed);
-    const { cols, rows } = gridSize(n);
+    const { cols, rows } = boardSize(players, o);
     this.cols = cols;
     this.rows = rows;
-    this.neighbors = buildNeighbors(n, cols, rows, this.opts.neighborhood, this.opts.torus);
-    this.color = new Array(n);
-    for (let i = 0; i < n; i++) this.color[i] = Math.floor(this.rng() * this.opts.colors);
-    this.fixed = new Array(n).fill(false);
-    // declaration per cell: { color, tick, invented } | null
-    this.decl = new Array(n).fill(null);
+    this.size = cols * rows;
+    this.neighbors = [];
+    for (let i = 0; i < this.size; i++) {
+      const x = i % cols;
+      const y = (i / cols) | 0;
+      const nb = [];
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if (dx || dy) nb.push(((y + dy + rows) % rows) * cols + ((x + dx + cols) % cols));
+      this.neighbors.push(nb);
+    }
+    this.color = Array.from({ length: this.size }, () => Math.floor(this.rng() * o.colors));
+    this.fixed = new Array(this.size).fill(false);
+
+    // players are scattered over the board
+    const cells = [...Array(this.size).keys()];
+    for (let i = cells.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [cells[i], cells[j]] = [cells[j], cells[i]];
+    }
+    this.players = players;
+    this.playerCell = cells.slice(0, players);
+    this.decl = new Array(players).fill(null); // { color, tick, invented }
     this.tick = 0;
+    this.events = []; // movements of the latest update
     this.history = [this.counts()];
   }
 
@@ -94,7 +99,7 @@ class World {
     return c;
   }
 
-  // plurality color of the world, or -1 on a tie
+  /** plurality color, or -1 on a tie */
   leader(counts = this.counts()) {
     let best = -1;
     let bestN = -1;
@@ -117,72 +122,91 @@ class World {
     return this.opts.ticks - this.tick;
   }
 
-  // 予言: may be changed any time unless already invented
-  predict(i, color) {
-    if (this.finished || this.fixed[i]) return false;
-    this.decl[i] = { color, tick: this.tick, invented: false };
+  /** 予言 by player p: may be changed any time unless already invented */
+  predict(p, color) {
+    if (this.finished || !this.validColor(color) || this.decl[p]?.invented) return false;
+    this.decl[p] = { color, tick: this.tick, invented: false };
     return true;
   }
 
-  // 発明: irreversible. The cell is fixed to the declared color.
-  invent(i, color) {
-    if (this.finished || this.fixed[i]) return false;
-    this.decl[i] = { color, tick: this.tick, invented: true };
-    this.fixed[i] = true;
-    this.color[i] = color;
+  /** 発明 by player p: irreversible, the cell is fixed to the color */
+  invent(p, color) {
+    if (this.finished || !this.validColor(color) || this.decl[p]?.invented) return false;
+    this.decl[p] = { color, tick: this.tick, invented: true };
+    const cell = this.playerCell[p];
+    this.fixed[cell] = true;
+    this.color[cell] = color;
     return true;
+  }
+
+  validColor(c) {
+    return Number.isInteger(c) && c >= 0 && c < this.opts.colors;
   }
 
   step() {
     if (this.finished) return;
-    const { colors, law, softBeta } = this.opts;
-    const next = this.color.slice();
-    const cnt = new Array(colors);
-    for (let i = 0; i < this.n; i++) {
+    const o = this.opts;
+    const rng = this.rng;
+    const cur = this.color;
+    const next = cur.slice();
+    for (let i = 0; i < this.size; i++) {
       if (this.fixed[i]) continue;
-      if (this.opts.rate < 1 && this.rng() >= this.opts.rate) continue;
-      const nb = this.neighbors[i];
-      if (law === 'voter') {
-        if (nb.length) next[i] = this.color[nb[Math.floor(this.rng() * nb.length)]];
-        continue;
-      }
-      cnt.fill(0);
-      cnt[this.color[i]]++;
-      for (const j of nb) cnt[this.color[j]]++;
-      if (law === 'soft') {
-        let total = 0;
-        const w = cnt.map((v) => Math.pow(v, softBeta));
-        for (const v of w) total += v;
-        let r = this.rng() * total;
-        for (let k = 0; k < colors; k++) {
-          r -= w[k];
-          if (r < 0) {
-            next[i] = k;
-            break;
-          }
-        }
-        continue;
-      }
-      // deterministic majority: unique plurality wins, otherwise keep current color
-      let best = this.color[i];
-      let bestN = cnt[best];
-      let unique = true;
-      for (let k = 0; k < colors; k++) {
-        if (k === best) continue;
-        if (cnt[k] > bestN) {
-          best = k;
-          bestN = cnt[k];
-          unique = true;
-        } else if (cnt[k] === bestN) unique = false;
-      }
-      if (unique) next[i] = best;
+      const r = rng();
+      if (r < o.noise) next[i] = Math.floor(rng() * o.colors);
+      else if (r < o.noise + o.imitate) next[i] = this.conform(i, cur);
     }
+
+    this.events = [];
+    if (rng() < o.movement) {
+      const short = Math.min(this.cols, this.rows);
+      const [a, b] = o.movementRadius;
+      const radius = short * (a + rng() * (b - a));
+      const cx = Math.floor(rng() * this.cols);
+      const cy = Math.floor(rng() * this.rows);
+      const color = Math.floor(rng() * o.colors);
+      for (let i = 0; i < this.size; i++) {
+        if (this.fixed[i]) continue;
+        let dx = Math.abs((i % this.cols) - cx);
+        let dy = Math.abs(((i / this.cols) | 0) - cy);
+        dx = Math.min(dx, this.cols - dx);
+        dy = Math.min(dy, this.rows - dy);
+        if (dx * dx + dy * dy <= radius * radius) next[i] = color;
+      }
+      this.events.push({ x: cx, y: cy, radius, color });
+    }
+
     this.color = next;
     this.tick++;
     this.history.push(this.counts());
   }
 
-  // Final result. score = ticks remaining at the final declaration, if correct.
+  /** the most common color among `sample` distinct random neighbors (ties broken at random) */
+  conform(i, cur) {
+    const k = this.opts.sample;
+    const nb = this.neighbors[i];
+    if (k <= 1) return cur[nb[Math.floor(this.rng() * 8)]];
+    const pick = this._pick || (this._pick = [0, 1, 2, 3, 4, 5, 6, 7]);
+    const cnt = this._cnt || (this._cnt = new Array(this.opts.colors));
+    cnt.fill(0);
+    for (let s = 0; s < k && s < 8; s++) {
+      const j = s + Math.floor(this.rng() * (8 - s));
+      [pick[s], pick[j]] = [pick[j], pick[s]];
+      cnt[cur[nb[pick[s]]]]++;
+    }
+    let best = 0;
+    let ties = 0;
+    let choice = 0;
+    for (let c = 0; c < cnt.length; c++) {
+      if (cnt[c] > best) {
+        best = cnt[c];
+        choice = c;
+        ties = 1;
+      } else if (cnt[c] === best && best > 0 && this.rng() < 1 / ++ties) choice = c;
+    }
+    return choice;
+  }
+
+  /** score per player = updates remaining at the final declaration, if it was right */
   result() {
     const future = this.leader();
     const scores = this.decl.map((d) =>
@@ -198,11 +222,13 @@ class World {
       colors: this.opts.colors,
       color: this.color,
       fixed: this.fixed,
+      playerCell: this.playerCell,
       tick: this.tick,
       ticks: this.opts.ticks,
       counts: this.counts(),
+      events: this.events,
     };
   }
 }
 
-module.exports = { World, DEFAULTS, makeRng, gridSize, autoRate };
+module.exports = { World, DEFAULTS, makeRng, boardSize };

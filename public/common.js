@@ -2,9 +2,9 @@
 /* shared by host and player pages */
 
 const COLORS = [
-  { name: '赤', hex: '#ff5a5f', glow: 'rgba(255,90,95,.55)' },
-  { name: '青', hex: '#4c8dff', glow: 'rgba(76,141,255,.55)' },
-  { name: '黄', hex: '#ffc83d', glow: 'rgba(255,200,61,.55)' },
+  { name: '赤', hex: '#ff5a5f' },
+  { name: '青', hex: '#4c8dff' },
+  { name: '黄', hex: '#ffc83d' },
 ];
 
 const BASE_YEAR = 2030;
@@ -17,8 +17,8 @@ function hexToRgb(h) {
 const RGB = COLORS.map((c) => hexToRgb(c.hex));
 
 /**
- * Draws the world on a canvas and animates color changes.
- * opts: { names: bool, highlight: cell index | null }
+ * Draws the world and animates it.
+ * opts: { names: bool } — write player names on their cells when there is room
  */
 class WorldView {
   constructor(canvas, opts = {}) {
@@ -26,11 +26,13 @@ class WorldView {
     this.ctx = canvas.getContext('2d');
     this.opts = opts;
     this.world = null;
-    this.from = null; // rgb per cell at transition start
+    this.from = null;
     this.to = null;
     this.t0 = 0;
-    this.dur = 450;
-    this.highlight = null;
+    this.dur = 350;
+    this.highlight = null; // cell index
+    this.ripples = [];
+    this.lastTick = -1;
     const loop = () => {
       this.draw();
       requestAnimationFrame(loop);
@@ -54,7 +56,7 @@ class WorldView {
     const e = k * k * (3 - 2 * k);
     return this.to.map((c, i) => {
       const f = this.from?.[i] || c;
-      return [0, 1, 2].map((j) => f[j] + (c[j] - f[j]) * e);
+      return [f[0] + (c[0] - f[0]) * e, f[1] + (c[1] - f[1]) * e, f[2] + (c[2] - f[2]) * e];
     });
   }
 
@@ -62,6 +64,7 @@ class WorldView {
     if (!world) {
       this.world = null;
       this.to = null;
+      this.lastTick = -1;
       return;
     }
     const now = performance.now();
@@ -70,7 +73,27 @@ class WorldView {
     this.from = sameShape ? this.current(now) : target;
     this.to = target;
     this.t0 = now;
+    if (world.tick !== this.lastTick) {
+      for (const ev of world.events || []) this.ripples.push({ ...ev, t0: now });
+      this.lastTick = world.tick;
+    }
     this.world = world;
+    this.fixedSet = new Set(world.fixedCells);
+    this.nameAt = new Map();
+    (world.playerCell || []).forEach((cell, i) => this.nameAt.set(cell, world.names?.[i] ?? ''));
+  }
+
+  layout() {
+    const { cols, rows } = this.world;
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const g = 0.12; // gap relative to a cell
+    const unit = Math.min(W / (cols + (cols - 1) * g), H / (rows + (rows - 1) * g));
+    const size = unit;
+    const gap = unit * g;
+    const ox = (W - (cols * size + (cols - 1) * gap)) / 2;
+    const oy = (H - (rows * size + (rows - 1) * gap)) / 2;
+    return { size, gap, ox, oy, step: size + gap };
   }
 
   draw() {
@@ -79,57 +102,84 @@ class WorldView {
     if (!world) return;
     const now = performance.now();
     const rgb = this.current(now);
-    const { cols, rows } = world;
-    const W = canvas.width;
-    const H = canvas.height;
-    const gap = Math.max(2, Math.min(W, H) * 0.012);
-    const size = Math.min((W - gap * (cols + 1)) / cols, (H - gap * (rows + 1)) / rows);
-    if (!(size > 1)) return;
-    const ox = (W - (size * cols + gap * (cols - 1))) / 2;
-    const oy = (H - (size * rows + gap * (rows - 1))) / 2;
-    const rad = size * 0.18;
+    const { cols } = world;
+    const L = this.layout();
+    if (!(L.size > 1)) return;
+    const { size, ox, oy, step } = L;
+    const rad = size * 0.22;
     const pulse = 0.5 + 0.5 * Math.sin(now / 380);
 
+    // cells
     for (let i = 0; i < world.color.length; i++) {
-      const x = ox + (i % cols) * (size + gap);
-      const y = oy + Math.floor(i / cols) * (size + gap);
-      const [r, g, b] = rgb[i].map(Math.round);
-      const fixed = world.fixed[i];
-
-      ctx.save();
-      if (fixed) {
-        ctx.shadowColor = `rgba(${r},${g},${b},.9)`;
-        ctx.shadowBlur = size * (0.35 + 0.15 * pulse);
-      }
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const x = ox + (i % cols) * step;
+      const y = oy + Math.floor(i / cols) * step;
+      const [r, g, b] = rgb[i];
+      ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
       roundRect(ctx, x, y, size, size, rad);
       ctx.fill();
-      ctx.restore();
+    }
 
-      if (fixed) {
-        // 発明者: a steady white core — the cell that no longer flows
-        ctx.strokeStyle = 'rgba(255,255,255,.95)';
-        ctx.lineWidth = Math.max(2, size * 0.07);
-        roundRect(ctx, x + size * 0.12, y + size * 0.12, size * 0.76, size * 0.76, rad * 0.7);
-        ctx.stroke();
-      }
-      if (this.highlight === i) {
+    // players: a dark dot (or their name); inventors: a glowing white frame
+    const fontPx = size * 0.3;
+    const showNames = this.opts.names && fontPx >= 10 * this.dpr;
+    for (const [cell, name] of this.nameAt) {
+      const x = ox + (cell % cols) * step;
+      const y = oy + Math.floor(cell / cols) * step;
+      if (this.fixedSet.has(cell)) {
+        const [r, g, b] = rgb[cell];
+        ctx.save();
+        ctx.shadowColor = `rgba(${r | 0},${g | 0},${b | 0},1)`;
+        ctx.shadowBlur = size * (0.6 + 0.4 * pulse);
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = Math.max(3, size * 0.09);
-        ctx.setLineDash([size * 0.14, size * 0.1]);
-        ctx.lineDashOffset = -now / 40;
-        roundRect(ctx, x - gap * 0.6, y - gap * 0.6, size + gap * 1.2, size + gap * 1.2, rad * 1.2);
+        ctx.lineWidth = Math.max(1.5, size * 0.14);
+        roundRect(ctx, x + size * 0.1, y + size * 0.1, size * 0.8, size * 0.8, rad * 0.7);
         ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.restore();
       }
-      if (this.opts.names && world.names && size > 36 * this.dpr) {
-        const name = world.names[i] || '';
-        ctx.fillStyle = 'rgba(10,12,20,.78)';
-        ctx.font = `600 ${Math.round(size * 0.16)}px system-ui, sans-serif`;
+      if (showNames) {
+        ctx.fillStyle = 'rgba(10,12,20,.85)';
+        ctx.font = `700 ${Math.round(fontPx)}px system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(clip(ctx, name, size * 0.9), x + size / 2, y + size / 2);
+        ctx.fillText(clip(ctx, name, size * 0.92), x + size / 2, y + size / 2);
+      } else {
+        ctx.fillStyle = 'rgba(10,12,20,.7)';
+        ctx.beginPath();
+        ctx.arc(x + size / 2, y + size / 2, Math.max(1.5, size * 0.14), 0, Math.PI * 2);
+        ctx.fill();
       }
+    }
+
+    // movements: an expanding ring
+    this.ripples = this.ripples.filter((rp) => now - rp.t0 < 1400);
+    for (const rp of this.ripples) {
+      const k = (now - rp.t0) / 1400;
+      const cx = ox + rp.x * step + size / 2;
+      const cy = oy + rp.y * step + size / 2;
+      ctx.strokeStyle = COLORS[rp.color].hex;
+      ctx.globalAlpha = 1 - k;
+      ctx.lineWidth = Math.max(3, size * 0.35) * (1 - k * 0.6);
+      ctx.beginPath();
+      ctx.arc(cx, cy, rp.radius * step * (0.4 + k * 0.9), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // me: a big moving ring that is easy to find on a crowded board
+    if (this.highlight !== null && this.highlight !== undefined) {
+      const i = this.highlight;
+      const cx = ox + (i % cols) * step + size / 2;
+      const cy = oy + Math.floor(i / cols) * step + size / 2;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(2.5, size * 0.16);
+      ctx.beginPath();
+      ctx.arc(cx, cy, size * (0.95 + 0.25 * pulse), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,.6)';
+      ctx.lineWidth = Math.max(1, size * 0.06);
+      ctx.beginPath();
+      ctx.arc(cx, cy, size * (0.95 + 0.25 * pulse) + Math.max(2.5, size * 0.16) / 2 + 1, 0, Math.PI * 2);
+      ctx.stroke();
     }
   }
 }
