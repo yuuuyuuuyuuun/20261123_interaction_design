@@ -103,7 +103,7 @@ function render() {
     lastEventTick = s.world.tick;
     const ev = s.world.events[s.world.events.length - 1];
     const c = COLORS[ev.color];
-    toast(ev.kind === 'charisma' ? `${c.name}のカリスマ、${s.world.names[ev.player]}が現れた` : `${c.name}のムーブメント！`, c.hex);
+    toast(ev.kind === 'charisma' ? `${c.name}のカリスマ、${s.world.names[ev.player]}` : `${c.name}のムーブメント！`, c.hex);
   }
 
   $('roundLabel').textContent = s.round ? `${yearOf(s.round)}年代（${s.round}/${s.rounds}）` : `全${s.rounds}ラウンド`;
