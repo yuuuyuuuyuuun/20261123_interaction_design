@@ -33,4 +33,8 @@ const results = COMPS.map((c) => rankBy(roster(c), OPTS, { games: GAMES }));
 const keys = [...KINDS.inv, ...KINDS.pred, ...KINDS.mix].map((k) => k.key);
 console.log('平均順位（30人中、小さいほど強い）。列は 発明/予言/混成 の人数');
 console.log(''.padEnd(26), COMPS.map((c) => c.join('/').padStart(9)).join(''));
-for (const k of keys) console.log(k.padEnd(26), results.map((r) => (r[k] ? r[k].avgRank.toFixed(1) : '-').padStart(9)).join(''));
+if (!process.env.BRIEF)
+  for (const k of keys) console.log(k.padEnd(26), results.map((r) => (r[k] ? r[k].avgRank.toFixed(1) : '-').padStart(9)).join(''));
+// best of each family per composition
+const best = (prefix) => results.map((r) => Math.min(...Object.entries(r).filter(([k]) => k.startsWith(prefix)).map(([, v]) => v.avgRank)));
+console.log('各系統の最良'.padEnd(23), '|', ['予言', '混成', '発明'].map((f) => `${f}: ${best(f).map((x) => x.toFixed(1)).join(' / ')}`).join('   '));

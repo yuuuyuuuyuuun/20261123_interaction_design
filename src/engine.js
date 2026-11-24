@@ -26,7 +26,7 @@ const DEFAULTS = {
   boardScale: 16, // board cells ≈ players × boardScale
   minCells: 96, // never smaller than this, so a small class still gets a lively world
   aspect: 4 / 3, // cols : rows
-  balancedStart: false, // start every round with the three colors in exactly equal numbers (the future is blank)
+  balancedStart: true, // start every round with the three colors in exactly equal numbers (the future is blank)
   noise: 0.006,
   imitate: 0.81,
   // conformity law
@@ -59,14 +59,14 @@ const DEFAULTS = {
   //   sample: look at `sample` random neighbors and take their most common color
   sample: 3,
   // ムーブメント
-  movement: 0.12, // probability per update (once ramped up)
+  movement: 0.03, // probability per update (once ramped up): rare, so that the board is mostly moved by people
   movementRamp: [0.15, 0.4], // none before 15% of the round, full rate from 40%
   quietFrom: 0.85, // no new movements or charismas in the last 15% of a round: the end is decided by what everyone can already see
   movementArea: [0.25, 0.5], // share of the board one movement paints (a disc), whatever the board size
   movementTarget: 'trailing', // 'trailing': only colors that are behind | 'any'
   // カリスマ
-  charisma: 0.15, // probability per update that an inventor of a trailing color gets it
-  charismaArea: 0.05, // share of the board under its spell (a disc around the inventor)
+  charisma: 0.2, // probability per update that an inventor of a trailing color gets it
+  charismaArea: 0.16, // share of the board under its spell (a disc around the inventor)
   charismaTurns: [5, 8],
   charismaPull: 30, // extra pull toward its color for the people under its spell (saturate/sample laws)
   charismaReach: 0.5, // voices/ally laws: chance per update that a person under the spell takes its color

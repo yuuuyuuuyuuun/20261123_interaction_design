@@ -32,9 +32,9 @@ for (const N of [10, 20, 30, 40]) {
   console.log(String(N).padStart(3), (w.cols + 'x' + w.rows).padStart(7), ' |', f(e.leaderChanges), '|', ''.padStart(27), p(1 - e.keep3), p(1 - e.keep30), p(1 - e.keep50), p(1 - e.keep55), ' |', p(e.herd).padStart(10));
 }
 
-console.log(`\n■ 8種類のボットが均等にいるラウンドで、開始4ターン時点の多数派が勝つ率: ${p(favoriteHolds(DEFAULTS, R))}`);
+console.log(`\n■ 全種類のボットが均等にいるラウンドで、開始4ターン時点の多数派が勝つ率: ${p(favoriteHolds(DEFAULTS, R))}`);
 
-console.log('\n■ 終盤に新しく始まったムーブメント・カリスマが原因の逆転（30人、8種類のボット）');
+console.log('\n■ 終盤に新しく始まったムーブメント・カリスマが原因の逆転（30人、全種類のボット）');
 const types = Array.from({ length: 30 }, (_, i) => Object.keys(BOT_TYPES)[i % 8]);
 for (const cut of [50, 55]) {
   let all = 0;
@@ -49,6 +49,6 @@ for (const cut of [50, 55]) {
 }
 
 for (const mode of ['equal', 'random']) {
-  console.log(`\n■ トーナメント（30人・5ラウンド・${R}ゲーム、構成: ${mode === 'equal' ? '8種類を均等に' : 'ゲームごとにランダム'}）`);
+  console.log(`\n■ トーナメント（30人・5ラウンド・${R}ゲーム、構成: ${mode === 'equal' ? '全種類を均等に' : 'ゲームごとにランダム'}）`);
   report(tournament(DEFAULTS, { games: R, mode }));
 }
