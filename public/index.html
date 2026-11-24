@@ -11,6 +11,12 @@
   .wrap { max-width: 520px; margin: 0 auto; padding: 14px 16px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; min-height: 100dvh; }
   header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
   header .name { font-weight: 700; }
+  header .name.editable { cursor: pointer; padding: 4px 10px; margin: -4px -10px; border-radius: 999px; border: 1px dashed var(--line); }
+  header .name.editable::after { content: ' ✎'; color: var(--muted); font-weight: 400; }
+  .modal { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(5,6,10,.7); backdrop-filter: blur(3px); }
+  .modal .sheet { width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .modal h3 { margin: 0; font-size: 18px; }
+  .modal .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .screen { display: flex; flex-direction: column; gap: 12px; flex: 1; }
   h2 { font-size: 26px; margin: 8px 0 0; line-height: 1.3; }
   p { margin: 0; line-height: 1.7; }
@@ -121,6 +127,19 @@
     </div>
     <p class="center muted" id="rNext">次のラウンドを待っています。</p>
   </section>
+</div>
+
+<!-- rename (from the waiting screen) -->
+<div class="modal hidden" id="renameModal" role="dialog" aria-modal="true" aria-labelledby="renameTitle">
+  <div class="sheet">
+    <h3 id="renameTitle">名前を変更</h3>
+    <input type="text" id="renameInput" maxlength="12" autocomplete="nickname">
+    <div class="err" id="renameErr"></div>
+    <div class="row">
+      <button class="btn ghost" id="renameCancel">キャンセル</button>
+      <button class="btn" id="renameOk">変更する</button>
+    </div>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>

@@ -49,6 +49,38 @@ function join(name) {
   });
 }
 $('joinBtn').onclick = () => join($('nameInput').value.trim());
+
+// ---- rename: tap your name while waiting for the game to start
+const canRename = () => joined && (!state || state.phase === 'lobby');
+function openRename() {
+  if (!canRename()) return;
+  $('renameInput').value = $('myName').textContent;
+  $('renameErr').textContent = '';
+  $('renameModal').classList.remove('hidden');
+  setTimeout(() => $('renameInput').select(), 0);
+}
+function closeRename() {
+  $('renameModal').classList.add('hidden');
+}
+function rename() {
+  const name = $('renameInput').value.trim();
+  if (!name) return ($('renameErr').textContent = '名前を入力してください');
+  socket.emit('join', name, (res) => {
+    if (!res?.ok) return ($('renameErr').textContent = res?.error || '変更できませんでした');
+    store.set(NAME_KEY, name);
+    $('myName').textContent = name;
+    closeRename();
+  });
+}
+$('myName').addEventListener('click', openRename);
+$('myName').addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && openRename());
+$('renameOk').onclick = rename;
+$('renameCancel').onclick = closeRename;
+$('renameModal').addEventListener('click', (e) => e.target === $('renameModal') && closeRename());
+$('renameInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') rename();
+  if (e.key === 'Escape') closeRename();
+});
 $('nameInput').addEventListener('keydown', (e) => e.key === 'Enter' && $('joinBtn').click());
 
 // ---- choices: one tap each
@@ -81,6 +113,11 @@ let cdTimer = null;
 
 function render() {
   clearInterval(cdTimer);
+  const editable = canRename();
+  $('myName').classList.toggle('editable', editable);
+  $('myName').setAttribute('role', editable ? 'button' : '');
+  $('myName').tabIndex = editable ? 0 : -1;
+  if (!editable) closeRename();
   if (!joined) return screen('join');
   const s = state;
   if (!s) return screen('wait');

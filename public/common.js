@@ -85,6 +85,7 @@ class WorldView {
     this.dur = 0; // colors switch at once (a hue fade between colors is hard on the eyes)
     this.highlight = null; // cell index
     this.ripples = [];
+    this.bursts = []; // charisma starting: a flash
     this.lastTick = -1;
     const loop = () => {
       this.draw();
@@ -130,7 +131,10 @@ class WorldView {
     this.world = world;
     this.fixedSet = new Set(world.fixedCells);
     if (world.tick !== this.lastTick) {
-      for (const ev of world.events || []) if (ev.kind === 'movement') this.ripples.push({ ...ev, t0: now });
+      for (const ev of world.events || []) {
+        if (ev.kind === 'movement') this.ripples.push({ ...ev, t0: now });
+        if (ev.kind === 'charisma') this.bursts.push({ ...ev, t0: now });
+      }
       this.lastTick = world.tick;
     }
     this.nameAt = new Map();
@@ -192,33 +196,70 @@ class WorldView {
       ctx.drawImage(tiles[world.color[i]], x, y, size, size);
     }
 
-    // charisma: a pulsing disc over the people under its spell (wrapping around the edges)
-    if ((world.charismas || []).length) {
+    // charisma: a bold ring with a turning dashed ring inside, waves sent out from the
+    // citizen, and a flash when it starts (wrapping around the edges of the board)
+    this.bursts = this.bursts.filter((b) => now - b.t0 < 900);
+    const auras = [
+      ...(world.charismas || []).map((c) => ({ ...c, burst: null })),
+      ...this.bursts.map((b) => ({ ...b, burst: (now - b.t0) / 900 })),
+    ];
+    if (auras.length) {
       ctx.save();
       ctx.beginPath();
       ctx.rect(ox - L.gap, oy - L.gap, cols * step + L.gap, world.rows * step + L.gap);
       ctx.clip();
-      for (const c of world.charismas) {
+      for (const c of auras) {
         const hex = COLORS[c.color].hex;
         const r = (c.radius + 0.5) * step;
         for (const wx of [-cols, 0, cols])
           for (const wy of [-world.rows, 0, world.rows]) {
             const cx = ox + (c.x + wx) * step + size / 2;
             const cy = oy + (c.y + wy) * step + size / 2;
-            if (cx - r > canvas.width || cy - r > canvas.height || cx + r < 0 || cy + r < 0) continue;
+            if (cx - r * 1.4 > canvas.width || cy - r * 1.4 > canvas.height || cx + r * 1.4 < 0 || cy + r * 1.4 < 0) continue;
             ctx.save();
+            if (c.burst !== null) {
+              // the start: a white flash over the area and a ring bursting outward
+              const k = c.burst;
+              ctx.globalAlpha = 0.35 * (1 - k);
+              ctx.fillStyle = '#fff';
+              ctx.beginPath();
+              ctx.arc(cx, cy, r, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.globalAlpha = 1 - k;
+              ctx.strokeStyle = '#fff';
+              ctx.lineWidth = Math.max(3, size * 0.35) * (1 - k * 0.7);
+              ctx.beginPath();
+              ctx.arc(cx, cy, r * (0.4 + 1.0 * k), 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.restore();
+              continue;
+            }
+            // waves sent out from the citizen
+            for (const phase of [0, 0.5]) {
+              const k = ((now / 1400 + phase) % 1 + 1) % 1;
+              ctx.globalAlpha = 0.85 * (1 - k);
+              ctx.strokeStyle = hex;
+              ctx.lineWidth = Math.max(2, size * 0.18) * (1 - k * 0.5);
+              ctx.beginPath();
+              ctx.arc(cx, cy, Math.max(1, r * k), 0, Math.PI * 2);
+              ctx.stroke();
+            }
+            // the edge: a bold glowing ring and a dashed ring turning inside it
+            ctx.globalAlpha = 1;
+            ctx.shadowColor = hex;
+            ctx.shadowBlur = size * (1.2 + 0.6 * pulse);
+            ctx.strokeStyle = hex;
+            ctx.lineWidth = Math.max(3, size * 0.26);
             ctx.beginPath();
             ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.globalAlpha = 0.05; // barely tinted: mixing hues over the cells is hard on the eyes
-            ctx.fillStyle = '#fff';
-            ctx.fill();
-            ctx.globalAlpha = 0.75 + 0.25 * pulse;
-            ctx.strokeStyle = hex;
-            ctx.lineWidth = Math.max(2, size * 0.14);
-            ctx.shadowColor = hex;
-            ctx.shadowBlur = size;
-            ctx.setLineDash([size * 0.5, size * 0.3]);
-            ctx.lineDashOffset = -now / 30;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = Math.max(1.5, size * 0.1);
+            ctx.setLineDash([size * 0.45, size * 0.35]);
+            ctx.lineDashOffset = -now / 25;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r - Math.max(3, size * 0.26), 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
           }
@@ -261,6 +302,30 @@ class WorldView {
         ctx.strokeStyle = '#fff';
         ctx.stroke();
       }
+    }
+
+    // the citizen who holds a charisma: a pulsing star
+    for (const c of world.charismas || []) {
+      const cx = ox + c.x * step + size / 2;
+      const cy = oy + c.y * step + size / 2;
+      const R = size * (0.62 + 0.12 * pulse);
+      ctx.save();
+      ctx.shadowColor = COLORS[c.color].hex;
+      ctx.shadowBlur = size * 1.2;
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = COLORS[c.color].ink;
+      ctx.lineWidth = Math.max(1.5, size * 0.08);
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = -Math.PI / 2 + (k * Math.PI) / 5;
+        const rr = k % 2 ? R * 0.45 : R;
+        k ? ctx.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a)) : ctx.moveTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a));
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.stroke();
+      ctx.restore();
     }
 
     // movements: an expanding ring, kept inside the board
