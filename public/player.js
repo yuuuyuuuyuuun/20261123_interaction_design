@@ -169,7 +169,24 @@ function render() {
   $('rNext').textContent = s.phase === 'final' ? 'ゲーム終了。大画面を見てください。' : '次のラウンドを待っています。';
 }
 
+let toastTimer = null;
+let lastEventTick = -1;
+function toast(text, color) {
+  const t = $('toast');
+  t.textContent = text;
+  t.style.color = color;
+  t.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.style.opacity = 0), 1600);
+}
+
 function renderPlay(s, me) {
+  // movement / charisma notices, as on the big screen
+  if (s.phase === 'playing' && s.world?.events?.length && s.world.tick !== lastEventTick) {
+    lastEventTick = s.world.tick;
+    const ev = s.world.events[s.world.events.length - 1];
+    toast(eventText(ev, s.world.names), COLORS[ev.color].hex);
+  }
   const playing = s.phase === 'playing';
   const inWorld = me && me.cell !== null;
   view.set(s.world);

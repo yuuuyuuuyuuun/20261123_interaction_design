@@ -338,6 +338,12 @@ function drawHistory(canvas, history) {
   }
 }
 
+/** the notice for a movement or a charisma (shared by the big screen and the phones) */
+function eventText(ev, names) {
+  const c = COLORS[ev.color];
+  return ev.kind === 'charisma' ? `${c.name}のカリスマ、${names[ev.player]}` : `${c.name}のムーブメント！`;
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }

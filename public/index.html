@@ -39,6 +39,7 @@
   .choice { display: flex; flex-direction: column; align-items: center; gap: 4px; }
   .choice .land-icon { display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
   .stage { position: relative; }
+  .toast { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 16px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 5px 14px; border-radius: 999px; background: rgba(11,13,20,.88); border: 1px solid var(--line); font-weight: 800; font-size: 15px; transition: opacity .4s; pointer-events: none; z-index: 2; }
   .countdown { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(11,13,20,.55); border-radius: 12px; pointer-events: none; }
   .countdown #cdNum { font-size: 120px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 4px 24px rgba(0,0,0,.6); }
   .countdown .cd-lbl { font-size: 16px; font-weight: 700; letter-spacing: .1em; }
@@ -115,6 +116,7 @@
     </div>
     <div class="stage">
       <canvas id="world"></canvas>
+      <div class="toast" id="toast" style="opacity:0"></div>
       <div class="countdown hidden" id="countdown"><span id="cdNum">5</span></div>
     </div>
     <div class="me" id="meLine"></div>
