@@ -19,7 +19,7 @@ let state = null;
     `${tile('<circle cx="19" cy="5" r="3.2" fill="#0a0c14" stroke="#fff" stroke-width="1.4"/>')}<span>市民の土地（右上の点、または名前）</span>`,
     `${tile('<rect x="3" y="3" width="18" height="18" rx="3.5" fill="none" stroke="#fff" stroke-width="3"/>')}<span>発明者の土地（もう変わらない）</span>`,
     `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="#fff" stroke-width="2.4" stroke-dasharray="4 3"/></svg><span>カリスマ（不利な発明者に宿り、周りに強い影響を与える）</span>`,
-    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="${COLORS[2].hex}" stroke-width="3.5"/></svg><span>ムーブメント（低確率で発生する大事件）</span>`,
+    `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="${COLORS[2].hex}" stroke-width="3.5"/></svg><span>ムーブメント（低確率で起こる大事件）</span>`,
   ]
     .map((h) => `<div>${h}</div>`)
     .join('');
