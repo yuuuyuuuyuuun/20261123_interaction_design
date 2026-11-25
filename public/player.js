@@ -51,7 +51,8 @@ function join(name) {
     render();
   });
 }
-$('joinBtn').onclick = () => join($('nameInput').value.trim());
+// an empty name joins with the hint shown in the field
+$('joinBtn').onclick = () => join($('nameInput').value.trim() || $('nameInput').placeholder);
 
 // ---- rename: tap your name while waiting for the game to start
 const canRename = () => joined && (!state || state.phase === 'lobby');
@@ -109,6 +110,7 @@ $('controls').addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ---- render
 function screen(id) {
+  document.body.classList.toggle('fit', id === 'play');
   for (const s of ['join', 'wait', 'play', 'result']) $(s).classList.toggle('hidden', s !== id);
 }
 
