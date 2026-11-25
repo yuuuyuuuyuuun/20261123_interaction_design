@@ -326,9 +326,15 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`世界は、わたしたちでできている`);
+  console.log(`未来を予測する最善の方法は、それを発明することだ。`);
   console.log(`  参加者用  : http://localhost:${PORT}/`);
   console.log(`  大画面用  : http://localhost:${PORT}/host?key=${HOST_KEY}`);
+  console.log('');
+  console.log(`  外部公開（pinggy など）するときは、公開URLの後ろに次を付けると大画面になります:`);
+  console.log(`      /host?key=${HOST_KEY}`);
+  console.log(`  例: https://xxxx.a.free.pinggy.link/host?key=${HOST_KEY}`);
+  console.log(`  ※ 大画面は公開URLで開いてください（QRコードは大画面を開いたURLから作られます）`);
+  if (!process.env.HOST_KEY) console.log(`  ※ 鍵は起動のたびに変わります。固定したいときは環境変数 HOST_KEY を指定してください`);
 });
 
 module.exports = { server, game, players, HOST_KEY };

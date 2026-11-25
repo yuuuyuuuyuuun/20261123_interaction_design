@@ -73,6 +73,44 @@ npm start
 | `TICK_MS` | 1000 | 1ターンの長さ（ミリ秒） |
 | `OBSERVE_MS` | 5000 | 各ラウンド開始前の観察時間 |
 
+## 外部公開（pinggy）
+
+ターミナルを2つ使います。
+
+1. ターミナル①でサーバーを起動します（閉じずにそのままにしておく）。
+
+   ```bash
+   npm start
+   ```
+
+   表示される `/host?key=xxxxxx` の部分を控えておきます。
+
+2. ターミナル②で pinggy を起動します（これも閉じずにそのままにしておく）。
+
+   ```bash
+   ssh -p 443 -R0:localhost:3000 free.pinggy.io
+   ```
+
+   `https://xxxx.a.free.pinggy.link` のような公開URLが表示されます。
+
+3. 大画面は、**公開URLの後ろに `/host?key=xxxxxx` を付けて**開きます（例：`https://xxxx.a.free.pinggy.link/host?key=xxxxxx`）。
+   - `localhost` で開くと、QRコードも `localhost` になり、参加者のスマホからは開けません。
+   - 参加者は、大画面のQRコードか公開URLそのもので参加します。
+
+鍵（`key=`）は起動のたびに変わります。固定したいときは、起動時に環境変数 `HOST_KEY` を指定します。
+
+- PowerShell の場合
+
+  ```powershell
+  $env:HOST_KEY="好きな鍵"; npm start
+  ```
+
+- Mac / Linux の場合
+
+  ```bash
+  HOST_KEY=好きな鍵 npm start
+  ```
+
 ## 開発用
 
 ```bash
