@@ -20,8 +20,10 @@ let selected = null; // color currently predicted
 const socket = io({ auth: { role: 'player', token } });
 const view = new WorldView($('world'));
 
+const i =Math.random()
+
 $('nameInput').value = store.get(NAME_KEY) || '';
-$('nameInput').placeholder = Math.random() < 0.5 ? 'アラン' : 'ケイ';
+$('nameInput').placeholder = i < 0.4 ? 'アラン' : i<0.8 ? 'ケイ' : i<0.9 ? '米太郎' : '牛尼剛聡';
 
 socket.on('welcome', ({ name }) => {
   joined = true;
