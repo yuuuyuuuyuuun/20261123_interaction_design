@@ -198,7 +198,7 @@ class WorldView {
     if ((world.charismas || []).length) {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(ox - L.gap, oy - L.gap, cols * step + L.gap, world.rows * step + L.gap);
+      ctx.rect(ox, oy, cols * step - L.gap, world.rows * step - L.gap); // exactly the board
       ctx.clip();
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = Math.max(2, size * 0.14);
@@ -261,7 +261,7 @@ class WorldView {
     if (this.ripples.length) {
       ctx.save();
       ctx.beginPath();
-      ctx.rect(ox - L.gap, oy - L.gap, cols * step + L.gap, world.rows * step + L.gap);
+      ctx.rect(ox, oy, cols * step - L.gap, world.rows * step - L.gap); // exactly the board
       ctx.clip();
       for (const rp of this.ripples) {
         const k = (now - rp.t0) / 1200;

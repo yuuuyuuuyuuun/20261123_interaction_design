@@ -21,6 +21,7 @@ const socket = io({ auth: { role: 'player', token } });
 const view = new WorldView($('world'));
 
 $('nameInput').value = store.get(NAME_KEY) || '';
+$('nameInput').placeholder = Math.random() < 0.5 ? 'アラン' : 'ケイ';
 
 socket.on('welcome', ({ name }) => {
   joined = true;
